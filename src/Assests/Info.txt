@@ -1,0 +1,1 @@
+Assests is where we store our static resouces like images,icons,fonts (can be deleted)
