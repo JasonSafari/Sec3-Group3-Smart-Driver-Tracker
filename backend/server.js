@@ -6,39 +6,41 @@ const cors = require('cors');
 const sequelize = require('./config/database');
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors()); // Allow all origins for development
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Health check route
+// Health check endpoint
 app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    message: 'Server is running'
+  res.json({ 
+    status: 'ok', 
+    message: 'Driver Analytics API is running',
+    timestamp: new Date().toISOString()
   });
 });
-
-// Get port from environment or default to 3000
-const PORT = process.env.PORT || 3000;
 
 // Routes
 const authRoutes = require('./routes/auth');
 const testRoutes = require('./routes/test');
 
-// Debug: Check if routes loaded
-console.log('Auth routes loaded:', authRoutes);
-console.log('Test routes loaded:', testRoutes);
-
 app.use('/api/auth', authRoutes);
 app.use('/api/test', testRoutes);
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ 
+    error: 'Something went wrong!',
+    message: err.message 
+  });
 });
 
-module.exports = app;
-
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📍 Health check: http://localhost:${PORT}/health`);
+  console.log(`📍 API Base: http://localhost:${PORT}/api`);
+});

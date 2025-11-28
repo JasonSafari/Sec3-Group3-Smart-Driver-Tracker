@@ -63,26 +63,26 @@ const User = sequelize.define('User', {
   tableName: 'users',
   timestamps: false,
   underscored: true,
- hooks: {
-  beforeCreate: async (user, options) => {
-    const password = user.password || user.getDataValue('password');
-    if (password) {
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
-      user.setDataValue('password_hash', hashedPassword);
-    }
-  },
-  beforeUpdate: async (user, options) => {
-    if (user.changed('password')) {
+  hooks: {
+    beforeCreate: async (user, options) => {
       const password = user.password || user.getDataValue('password');
       if (password) {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
         user.setDataValue('password_hash', hashedPassword);
       }
+    },
+    beforeUpdate: async (user, options) => {
+      if (user.changed('password')) {
+        const password = user.password || user.getDataValue('password');
+        if (password) {
+          const salt = await bcrypt.genSalt(10);
+          const hashedPassword = await bcrypt.hash(password, salt);
+          user.setDataValue('password_hash', hashedPassword);
+        }
+      }
     }
   }
-}
 });
 
 // Instance method to compare passwords
