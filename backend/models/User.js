@@ -31,14 +31,14 @@ const User = sequelize.define('User', {
       this.setDataValue('email', value.toLowerCase());
     }
   },
-  password: {
-    type: DataTypes.VIRTUAL,
-    allowNull: false,
-    validate: {
-      notEmpty: { msg: 'Password is required' },
-      len: { args: [8, 255], msg: 'Password must be at least 8 characters' }
-    }
-  },
+ password: {
+  type: DataTypes.VIRTUAL,
+  allowNull: true,  // Changed from false to true
+  validate: {
+    notEmpty: { msg: 'Password is required' },
+    len: { args: [8, 255], msg: 'Password must be at least 8 characters' }
+  }
+},
   password_hash: {
     type: DataTypes.STRING(255),
     allowNull: false,
@@ -62,27 +62,8 @@ const User = sequelize.define('User', {
 }, {
   tableName: 'users',
   timestamps: false,
-  underscored: true,
-  hooks: {
-    beforeCreate: async (user, options) => {
-      const password = user.password || user.getDataValue('password');
-      if (password) {
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
-        user.setDataValue('password_hash', hashedPassword);
-      }
-    },
-    beforeUpdate: async (user, options) => {
-      if (user.changed('password')) {
-        const password = user.password || user.getDataValue('password');
-        if (password) {
-          const salt = await bcrypt.genSalt(10);
-          const hashedPassword = await bcrypt.hash(password, salt);
-          user.setDataValue('password_hash', hashedPassword);
-        }
-      }
-    }
-  }
+  underscored: true
+  // Hooks removed - password hashing is handled in the controller
 });
 
 // Instance method to compare passwords
