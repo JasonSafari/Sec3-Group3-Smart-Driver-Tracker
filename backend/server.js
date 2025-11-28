@@ -23,6 +23,17 @@ app.get('/health', (req, res) => {
 // Get port from environment or default to 3000
 const PORT = process.env.PORT || 3000;
 
+// Routes
+const authRoutes = require('./routes/auth');
+const testRoutes = require('./routes/test');
+
+// Debug: Check if routes loaded
+console.log('Auth routes loaded:', authRoutes);
+console.log('Test routes loaded:', testRoutes);
+
+app.use('/api/auth', authRoutes);
+app.use('/api/test', testRoutes);
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
