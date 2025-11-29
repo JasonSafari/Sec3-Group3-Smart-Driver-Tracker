@@ -33,6 +33,7 @@ const familyRoutes = require('./routes/families');
 const scoreRoutes = require('./routes/scores');
 const dataPointRoutes = require('./routes/datapoints');
 const analyticsRoutes = require('./routes/analytics');
+const routeAnalysisRoutes = require('./routes/routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/test', testRoutes);
@@ -41,6 +42,7 @@ app.use('/api/families', familyRoutes);
 app.use('/api/scores', scoreRoutes);
 app.use('/api/datapoints', dataPointRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/routes', routeAnalysisRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
