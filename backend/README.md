@@ -363,14 +363,65 @@ Common HTTP status codes:
 - Family-scoped access control
 - User-scoped data access
 
-## Next Steps (Sprint 3)
+## Sprint 3 Features (✅ COMPLETE)
+
+### Trip Filtering and Search
+- **GET** `/api/trips` - Get trips with advanced filtering (date, distance, score ranges)
+- **GET** `/api/trips/search?q=keyword` - Search trips by keyword
+- **GET** `/api/trips/family` - Get all family member trips (for parents)
+- **GET** `/api/trips/export/csv` - Export trips to CSV format
+
+### Customizable Score Calculation
+- **POST** `/api/scores/calculate/:tripId` - Calculate scores with custom parameters:
+  - `speedLimit` - Custom speed limit
+  - `harshBrakeThreshold` - Custom braking threshold
+  - `speedPenaltyMultiplier` / `brakePenaltyMultiplier` - Custom penalties
+  - `speedWeight` / `brakeWeight` - Custom score weights
+
+### Advanced Route Analysis
+- **GET** `/api/routes/heatmap/:tripId` - Get heat map data for visualization
+- **GET** `/api/routes/analysis/:tripId` - Get detailed route analysis:
+  - Distance calculation (Haversine formula)
+  - Speed and acceleration segments
+  - Route efficiency score
+
+## Sprint 3 API Examples
+
+### Filter Trips
+```bash
+curl -X GET "http://localhost:3000/api/trips?startDate=2024-01-01&minDistance=20&minScore=75" \
+  -H "Authorization: Bearer <token>"
+```
+
+### Export to CSV
+```bash
+curl -X GET "http://localhost:3000/api/trips/export/csv?startDate=2024-01-01" \
+  -H "Authorization: Bearer <token>" \
+  --output trips.csv
+```
+
+### Custom Score Calculation
+```bash
+curl -X POST http://localhost:3000/api/scores/calculate/1 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"speedLimit": 60, "speedWeight": 0.7, "brakeWeight": 0.3}'
+```
+
+### Route Analysis
+```bash
+curl -X GET http://localhost:3000/api/routes/heatmap/1 \
+  -H "Authorization: Bearer <token>"
+```
+
+## Next Steps (Future Enhancements)
 
 - [ ] Real-time trip tracking (WebSocket support)
 - [ ] Push notifications for parents
-- [ ] Advanced analytics (heat maps, route analysis)
-- [ ] Export trip data (CSV, PDF reports)
-- [ ] Trip sharing between family members
-- [ ] Customizable score calculation parameters
+- [ ] PDF export for trip reports
+- [ ] Integration with external mapping services
+- [ ] Trip comparison features
+- [ ] Machine learning for driving pattern recognition
 
 ## Troubleshooting
 
