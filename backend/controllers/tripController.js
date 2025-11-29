@@ -1,10 +1,7 @@
 const { validationResult } = require('express-validator');
 const Trip = require('../models/Trip');
 const User = require('../models/User');
-
-// Set up associations to avoid circular dependency
-Trip.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
-User.hasMany(Trip, { foreignKey: 'user_id', as: 'trips' });
+// Associations are set up in models/associations.js
 
 /**
  * Get all trips for the authenticated user
