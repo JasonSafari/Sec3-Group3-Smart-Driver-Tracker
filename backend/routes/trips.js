@@ -165,13 +165,8 @@ router.post('/:trip_id/stop', [
     .isFloat({ min: -180, max: 180 }).withMessage('Longitude must be between -180 and 180')
 ], stopTrip);
 
-/**
- * @route   GET /api/trips
- * @desc    Get user trips (supports userId query param for parents)
- * @access  Private
- */
-// Note: This route is already defined above, but we'll add getUserTrips as alternative
-// The existing getTrips handles filtering, getUserTrips handles parent/teen viewing
+// Note: GET /api/trips is already defined at line 29
+// getUserTrips and getTripDetails are used internally by getTrips and getTripById
 
 module.exports = router;
 

@@ -185,6 +185,8 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   scoreCard: {
+    paddingTop: 32,
+    overflow: 'visible',
     alignItems: 'center',
     padding: 24,
     borderRadius: 16,
@@ -197,6 +199,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   scoreValue: {
+    lineHeight: 56,
     fontSize: 48,
     fontWeight: '700',
   },

@@ -15,9 +15,10 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/hooks/use-auth';
 import { createFamily } from '@/services/familyService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function CreateFamilyScreen() {
-  const { user, token } = useAuth();
+  const { user, token, setUser } = useAuth();
   const router = useRouter();
   const [familyName, setFamilyName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -38,7 +39,23 @@ export default function CreateFamilyScreen() {
     try {
       const result = await createFamily(familyName.trim());
       setInviteCode(result.family.invite_code);
-      Alert.alert('Success', 'Family created! Share the invite code with your teen.');
+      // Update user data with new family_id
+      if (user && result.family) {
+        const updatedUser = { ...user, family_id: result.family.family_id };
+        setUser(updatedUser);
+        await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
+      }
+      // Navigate directly to parent dashboard to avoid redirect loop
+      Alert.alert('Success', 'Family created! Share the invite code with your teen.', [
+        {
+          text: 'OK',
+          onPress: () => {
+            setTimeout(() => {
+              router.replace('/parent-dashboard');
+            }, 100);
+          },
+        },
+      ]);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to create family');
     } finally {
@@ -80,7 +97,7 @@ export default function CreateFamilyScreen() {
 
         <Pressable
           style={styles.button}
-          onPress={() => router.replace('/(tabs)')}
+          onPress={() => router.replace('/parent-dashboard')}
         >
           <ThemedText style={styles.buttonText}>Continue</ThemedText>
         </Pressable>

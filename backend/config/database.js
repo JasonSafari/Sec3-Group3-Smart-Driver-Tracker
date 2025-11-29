@@ -26,25 +26,24 @@ const sequelize = new Sequelize(
   }
 );
 
-// Test database connection
+// Test database connection - BLOCKS server startup if connection fails
 const testConnection = async () => {
   try {
     await sequelize.authenticate();
     console.log('✅ MySQL database connected successfully');
     return true;
   } catch (error) {
-    console.error('❌ Unable to connect to MySQL database:', error.message);
+    console.error('❌ CRITICAL: Unable to connect to MySQL database:', error.message);
     console.error('⚠️  Please check your .env file and ensure:');
     console.error('   - DB_NAME, DB_USER, DB_PASSWORD, DB_HOST are set correctly');
     console.error('   - MySQL server is running');
     console.error('   - User has proper permissions');
-    // Don't crash the server - allow it to start and retry later
-    return false;
+    // Exit process - server should not start without database
+    process.exit(1);
   }
 };
 
-// Test connection asynchronously (don't block server startup)
-testConnection();
-
+// Export sequelize and connection test function
 module.exports = sequelize;
+module.exports.testConnection = testConnection;
 

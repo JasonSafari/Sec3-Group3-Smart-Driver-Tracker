@@ -332,6 +332,24 @@ const exportTripsToCSV = async (req, res) => {
       order: [['start_time', 'DESC']]
     });
 
+    // Helper function to escape CSV values (prevents CSV injection)
+    const escapeCSV = (value) => {
+      if (value === null || value === undefined) return '';
+      const str = String(value);
+      // Escape quotes by doubling them
+      const escaped = str.replace(/"/g, '""');
+      // Wrap in quotes if contains comma, newline, or quote
+      if (escaped.includes(',') || escaped.includes('\n') || escaped.includes('"')) {
+        return `"${escaped}"`;
+      }
+      // Prevent CSV injection by prefixing dangerous characters with tab
+      // Dangerous: =, +, -, @, \t
+      if (/^[=+\-@\t]/.test(escaped)) {
+        return `\t${escaped}`;
+      }
+      return escaped;
+    };
+
     // Generate CSV
     const csvHeader = 'Trip ID,User Name,Email,Start Time,End Time,Distance (km),Avg Speed (km/h),Overall Score,Speed Score,Brake Score\n';
     const csvRows = trips.map(trip => {
@@ -343,7 +361,18 @@ const exportTripsToCSV = async (req, res) => {
       const speedScore = trip.score?.speed_score || '';
       const brakeScore = trip.score?.brake_score || '';
 
-      return `${trip.trip_id},"${trip.user?.name || ''}","${trip.user?.email || ''}",${startTime},${endTime},${distance},${avgSpeed},${overallScore},${speedScore},${brakeScore}`;
+      return [
+        trip.trip_id,
+        escapeCSV(trip.user?.name || ''),
+        escapeCSV(trip.user?.email || ''),
+        escapeCSV(startTime),
+        escapeCSV(endTime),
+        escapeCSV(distance),
+        escapeCSV(avgSpeed),
+        escapeCSV(overallScore),
+        escapeCSV(speedScore),
+        escapeCSV(brakeScore)
+      ].join(',');
     }).join('\n');
 
     const csv = csvHeader + csvRows;

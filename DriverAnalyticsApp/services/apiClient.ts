@@ -7,10 +7,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 declare const process: any;
 
+// Get API URL from environment variable
+// Must be set in .env file: EXPO_PUBLIC_API_URL=http://YOUR_IP:3000/api
 const API_BASE_URL: string =
   (typeof process !== 'undefined' &&
     (process as any)?.env?.EXPO_PUBLIC_API_URL) ||
-  'http://localhost:3000/api';
+  (() => {
+    if (__DEV__) {
+      console.warn(
+        '⚠️  EXPO_PUBLIC_API_URL not set in .env file!\n' +
+        '   Create .env file with: EXPO_PUBLIC_API_URL=http://YOUR_IP:3000/api\n' +
+        '   Using localhost as fallback (may not work on physical device)'
+      );
+    }
+    return 'http://localhost:3000/api';
+  })();
 
 const TIMEOUT = 30000; // 30 seconds
 
@@ -67,9 +78,10 @@ async function apiRequest<T>(
 
     const data = await response.json();
 
-    // Handle 401 - unauthorized (token expired/invalid)
-    if (response.status === 401) {
-      await AsyncStorage.multiRemove(['userToken', 'userData']);
+    // Handle 401 and 403 - unauthorized/forbidden (token expired/invalid)
+    if (response.status === 401 || response.status === 403) {
+      await AsyncStorage.multiRemove(['userToken', 'userData', 'activeTripId', 'tripDataPoints']);
+      // Throw error - navigation will be handled by useAuth hook or calling component
       throw new Error('Session expired. Please login again.');
     }
 

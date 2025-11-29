@@ -32,9 +32,77 @@ export default function LiveTripScreen() {
   const [lastLocation, setLastLocation] = useState<Location.LocationObject | null>(null);
 
   useEffect(() => {
-    initializeTrip();
+    let isMounted = true;
+    let locSub: any = null;
+    let accelSub: any = null;
+
+    const init = async () => {
+      try {
+        const storedTripId = await AsyncStorage.getItem('activeTripId');
+        if (!storedTripId) {
+          Alert.alert('Error', 'No active trip found');
+          router.back();
+          return;
+        }
+
+        if (!isMounted) return;
+
+        setTripId(parseInt(storedTripId));
+        setStartTime(new Date());
+
+        // Request location permissions
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Error', 'Location permission required');
+          return;
+        }
+
+        if (!isMounted) return;
+
+        // Start location tracking
+        locSub = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced,
+            timeInterval: 5000, // Every 5 seconds
+            distanceInterval: 10, // Every 10 meters
+          },
+          (newLocation) => {
+            if (isMounted) {
+              handleLocationUpdate(newLocation);
+            }
+          }
+        );
+        setLocationSubscription(locSub);
+
+        // Start accelerometer
+        Accelerometer.setUpdateInterval(1000); // Every 1 second
+        accelSub = Accelerometer.addListener(({ x, y, z }) => {
+          if (isMounted) {
+            // Use z-axis for forward/backward acceleration (braking)
+            const acceleration = -z * 9.81; // Convert to m/s²
+            handleAccelerometerUpdate(acceleration);
+          }
+        });
+        setAccelSubscription(accelSub);
+      } catch (error: any) {
+        if (isMounted) {
+          Alert.alert('Error', error.message);
+        }
+      }
+    };
+
+    init();
+
     return () => {
+      isMounted = false;
       // Cleanup subscriptions
+      if (locSub) {
+        locSub.remove();
+      }
+      if (accelSub) {
+        accelSub.remove();
+      }
+      // Also cleanup state subscriptions if they exist
       if (locationSubscription) {
         locationSubscription.remove();
       }
@@ -44,50 +112,7 @@ export default function LiveTripScreen() {
     };
   }, []);
 
-  const initializeTrip = async () => {
-    try {
-      const storedTripId = await AsyncStorage.getItem('activeTripId');
-      if (!storedTripId) {
-        Alert.alert('Error', 'No active trip found');
-        router.back();
-        return;
-      }
-
-      setTripId(parseInt(storedTripId));
-      setStartTime(new Date());
-
-      // Request location permissions
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Error', 'Location permission required');
-        return;
-      }
-
-      // Start location tracking
-      const locSub = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.Balanced,
-          timeInterval: 5000, // Every 5 seconds
-          distanceInterval: 10, // Every 10 meters
-        },
-        (newLocation) => {
-          handleLocationUpdate(newLocation);
-        }
-      );
-      setLocationSubscription(locSub);
-
-      // Start accelerometer
-      Accelerometer.setUpdateInterval(1000); // Every 1 second
-      const accelSub = Accelerometer.addListener(({ x, y, z }) => {
-        // Use z-axis for forward/backward acceleration (braking)
-        const acceleration = -z * 9.81; // Convert to m/s²
-        handleAccelerometerUpdate(acceleration);
-      });
-      setAccelSubscription(accelSub);
-    } catch (error: any) {
-      Alert.alert('Error', error.message);
-    }
-  };
+  // Removed - now handled in useEffect
 
   const handleLocationUpdate = (newLocation: Location.LocationObject) => {
     setLocation(newLocation);

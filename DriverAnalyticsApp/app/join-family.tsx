@@ -14,9 +14,11 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/hooks/use-auth';
 import { joinFamily } from '@/services/familyService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function JoinFamilyScreen() {
-  const { user, token } = useAuth();
+  const { user, token, setUser } = useAuth();
   const router = useRouter();
   const [inviteCode, setInviteCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -39,11 +41,22 @@ export default function JoinFamilyScreen() {
 
     setLoading(true);
     try {
-      await joinFamily(inviteCode.trim().toUpperCase());
+      const result = await joinFamily(inviteCode.trim().toUpperCase());
+      // Update user data with new family_id
+      if (user && result.family) {
+        const updatedUser = { ...user, family_id: result.family.family_id };
+        setUser(updatedUser);
+        await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
+      }
+      // Navigate directly to teen dashboard to avoid redirect loop
       Alert.alert('Success', 'Successfully joined family!', [
         {
           text: 'OK',
-          onPress: () => router.replace('/(tabs)'),
+          onPress: () => {
+            setTimeout(() => {
+              router.replace('/teen-dashboard');
+            }, 100);
+          },
         },
       ]);
     } catch (error: any) {

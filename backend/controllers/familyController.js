@@ -1,16 +1,21 @@
 const { validationResult } = require('express-validator');
+const crypto = require('crypto');
 const FamilyAccount = require('../models/FamilyAccount');
 const User = require('../models/User');
 
 /**
- * Generate a random 6-character invite code
+ * Generate a cryptographically secure random 6-character invite code
  * Format: A1B2C3 (alphanumeric, uppercase)
+ * Uses crypto.randomBytes for secure random generation
  */
 const generateInviteCode = () => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let code = '';
+  // Use crypto.randomBytes for cryptographically secure random numbers
+  const randomBytes = crypto.randomBytes(6);
   for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+    // Use modulo to map random byte to character index
+    code += chars[randomBytes[i] % chars.length];
   }
   return code;
 };

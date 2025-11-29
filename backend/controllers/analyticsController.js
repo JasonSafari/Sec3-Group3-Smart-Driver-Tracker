@@ -164,12 +164,15 @@ const getSafetyMetrics = async (req, res) => {
   try {
     const userId = req.user.userId;
 
+    // Optimize query - use aggregation instead of loading all datapoints
     const trips = await Trip.findAll({
       where: { user_id: userId },
+      attributes: ['trip_id'],
       include: [{
         model: DataPoint,
         as: 'datapoints',
-        required: false
+        required: false,
+        attributes: ['speed', 'acceleration']
       }]
     });
 
@@ -178,8 +181,9 @@ const getSafetyMetrics = async (req, res) => {
     let harshBrakingInstances = 0;
     const SPEED_LIMIT = 50; // km/h
 
+    // Process datapoints efficiently
     trips.forEach(trip => {
-      if (trip.datapoints) {
+      if (trip.datapoints && trip.datapoints.length > 0) {
         trip.datapoints.forEach(point => {
           totalDataPoints++;
           if (point.speed && point.speed > SPEED_LIMIT) {

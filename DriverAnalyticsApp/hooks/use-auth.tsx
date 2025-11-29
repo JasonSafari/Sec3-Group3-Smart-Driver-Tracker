@@ -16,6 +16,7 @@ type AuthContextValue = {
   user: AuthUser | null;
   token: string | null;
   loading: boolean;
+  setUser: (user: AuthUser | null) => void;
   login: (email: string, password: string) => Promise<void>;
   register: (payload: {
     name: string;
@@ -28,11 +29,21 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-// Support both Expo env vars and a sensible default without requiring Node.js types
+// Get API URL from environment variable
+// Must be set in .env file: EXPO_PUBLIC_API_URL=http://YOUR_IP:3000/api
 const API_BASE_URL: string =
   (typeof process !== 'undefined' &&
     (process as any)?.env?.EXPO_PUBLIC_API_URL) ||
-  'http://localhost:3000/api';
+  (() => {
+    if (__DEV__) {
+      console.warn(
+        '⚠️  EXPO_PUBLIC_API_URL not set in .env file!\n' +
+        '   Create .env file with: EXPO_PUBLIC_API_URL=http://YOUR_IP:3000/api\n' +
+        '   Using localhost as fallback (may not work on physical device)'
+      );
+    }
+    return 'http://localhost:3000/api';
+  })();
 
 // Log the API URL being used (for debugging)
 if (__DEV__) {
@@ -76,6 +87,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (!data || !data.user || !data.token) {
       console.error('Invalid auth response:', data);
       throw new Error('Invalid authentication response from server');
+    }
+    
+    // Update user data if family_id changed (after joining/creating family)
+    if (data.user.family_id !== undefined) {
+      data.user.family_id = data.user.family_id;
     }
     const userData = data.user as AuthUser;
     const tokenData = data.token as string;
@@ -230,6 +246,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     user,
     token,
     loading,
+    setUser,
     login,
     register,
     logout,

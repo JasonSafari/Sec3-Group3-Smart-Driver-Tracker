@@ -13,32 +13,39 @@ export default function HomeScreen() {
   const router = useRouter();
   const { user, token, loading } = useAuth();
 
-  // Only redirect on initial app load, not when navigating back
-  const redirectRef = React.useRef(false);
+  // Track if we've already done the initial redirect
+  const [hasRedirected, setHasRedirected] = React.useState(false);
+  const lastFamilyId = React.useRef<number | null>(null);
 
   useEffect(() => {
-    // Reset redirect ref when user logs out
+    // Don't redirect if still loading
+    if (loading) return;
+
+    // If not logged in, redirect to login
     if (!token || !user) {
-      redirectRef.current = false;
-      // If not logged in and on home screen, redirect to login
-      // Use a small delay to prevent navigation conflicts
-      if (!loading) {
-        const timer = setTimeout(() => {
-          router.replace('/login');
-        }, 100);
-        return () => clearTimeout(timer);
+      if (!hasRedirected) {
+        setHasRedirected(true);
+        router.replace('/login');
       }
+      lastFamilyId.current = null;
       return;
     }
     
+    // Reset redirect flag if family_id changed (user joined/created family)
+    const currentFamilyId = user.family_id ?? null;
+    if (currentFamilyId !== lastFamilyId.current) {
+      lastFamilyId.current = currentFamilyId;
+      setHasRedirected(false); // Allow redirect after family status change
+    }
+    
     // Only redirect once on initial app load if user is logged in
-    // Use ref to prevent multiple redirects
-    if (!loading && !redirectRef.current && token && user) {
-      redirectRef.current = true;
+    if (!hasRedirected && token && user) {
+      setHasRedirected(true);
+      lastFamilyId.current = user.family_id ?? null;
       
       // Small delay to ensure navigation is ready
       const timer = setTimeout(() => {
-        // Redirect based on role and family status (only on initial load)
+        // Redirect based on role and family status
         if (user.role === 'teen') {
           if (!user.family_id) {
             router.replace('/join-family');
@@ -56,7 +63,7 @@ export default function HomeScreen() {
       
       return () => clearTimeout(timer);
     }
-  }, [loading, token, user, router]);
+  }, [loading, token, user, user?.family_id, hasRedirected, router]);
 
   // Show login/register screen if not logged in
   if (!loading && (!token || !user)) {

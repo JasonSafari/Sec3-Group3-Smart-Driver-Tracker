@@ -2,13 +2,14 @@ const express = require('express');
 const router = express.Router();
 const { body } = require('express-validator');
 const { register, login } = require('../controllers/authController');
+const { authRateLimiter } = require('../middleware/rateLimiter');
 
 /**
  * @route   POST /api/auth/register
  * @desc    Register a new user
  * @access  Public
  */
-router.post('/register', [
+router.post('/register', authRateLimiter, [
   body('name')
     .trim()
     .notEmpty().withMessage('Name is required')
@@ -31,7 +32,7 @@ router.post('/register', [
  * @desc    Login user
  * @access  Public
  */
-router.post('/login', [
+router.post('/login', authRateLimiter, [
   body('email')
     .trim()
     .notEmpty().withMessage('Email is required')
