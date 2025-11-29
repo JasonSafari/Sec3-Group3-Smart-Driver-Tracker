@@ -33,6 +33,11 @@ const API_BASE_URL: string =
     (process as any)?.env?.EXPO_PUBLIC_API_URL) ||
   'http://localhost:3000/api';
 
+// Log the API URL being used (for debugging)
+if (__DEV__) {
+  console.log('API_BASE_URL:', API_BASE_URL);
+}
+
 type AuthProviderProps = {
   children: React.ReactNode;
 };
@@ -53,6 +58,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const login = useCallback(async (email: string, password: string) => {
     setLoading(true);
     try {
+      console.log('Attempting login to:', `${API_BASE_URL}/auth/login`);
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
@@ -70,6 +76,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       handleAuthResponse(data);
+    } catch (error: any) {
+      console.error('Login error:', error);
+      // Handle network errors specifically
+      if (error.message === 'Network request failed' || error.name === 'TypeError') {
+        throw new Error(
+          'Cannot connect to server. Make sure:\n' +
+          '1. Backend is running (npm run dev in backend folder)\n' +
+          '2. Your phone and PC are on the same Wi-Fi\n' +
+          '3. EXPO_PUBLIC_API_URL in .env points to your PC\'s IP address'
+        );
+      }
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -84,6 +102,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }) => {
       setLoading(true);
       try {
+        console.log('Attempting register to:', `${API_BASE_URL}/auth/register`);
         const response = await fetch(`${API_BASE_URL}/auth/register`, {
           method: 'POST',
           headers: {
@@ -104,6 +123,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
 
         handleAuthResponse(data);
+      } catch (error: any) {
+        console.error('Register error:', error);
+        // Handle network errors specifically
+        if (error.message === 'Network request failed' || error.name === 'TypeError') {
+          throw new Error(
+            'Cannot connect to server. Make sure:\n' +
+            '1. Backend is running (npm run dev in backend folder)\n' +
+            '2. Your phone and PC are on the same Wi-Fi\n' +
+            '3. EXPO_PUBLIC_API_URL in .env points to your PC\'s IP address'
+          );
+        }
+        throw error;
       } finally {
         setLoading(false);
       }
