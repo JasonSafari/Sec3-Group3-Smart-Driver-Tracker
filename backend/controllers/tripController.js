@@ -1,29 +1,102 @@
 const { validationResult } = require('express-validator');
+const { Op } = require('sequelize');
 const Trip = require('../models/Trip');
 const User = require('../models/User');
+const Score = require('../models/Score');
+const DataPoint = require('../models/DataPoint');
 // Associations are set up in models/associations.js
 
 /**
- * Get all trips for the authenticated user
- * GET /api/trips
+ * Get all trips for the authenticated user with filtering
+ * GET /api/trips?startDate=2024-01-01&endDate=2024-12-31&minDistance=10&maxDistance=100&minScore=80
  */
 const getTrips = async (req, res) => {
   try {
     const userId = req.user.userId;
+    const {
+      startDate,
+      endDate,
+      minDistance,
+      maxDistance,
+      minScore,
+      maxScore,
+      limit = 50,
+      offset = 0,
+      sortBy = 'start_time',
+      sortOrder = 'DESC'
+    } = req.query;
+
+    // Build where clause
+    const whereClause = { user_id: userId };
+
+    // Date filtering
+    if (startDate || endDate) {
+      whereClause.start_time = {};
+      if (startDate) {
+        whereClause.start_time[Op.gte] = new Date(startDate);
+      }
+      if (endDate) {
+        whereClause.start_time[Op.lte] = new Date(endDate);
+      }
+    }
+
+    // Distance filtering
+    if (minDistance || maxDistance) {
+      whereClause.distance_km = {};
+      if (minDistance) {
+        whereClause.distance_km[Op.gte] = parseFloat(minDistance);
+      }
+      if (maxDistance) {
+        whereClause.distance_km[Op.lte] = parseFloat(maxDistance);
+      }
+    }
+
+    // Score filtering (requires join with Score)
+    let scoreFilter = {};
+    if (minScore || maxScore) {
+      if (minScore) {
+        scoreFilter.overall_score = { [Op.gte]: parseFloat(minScore) };
+      }
+      if (maxScore) {
+        scoreFilter.overall_score = {
+          ...scoreFilter.overall_score,
+          [Op.lte]: parseFloat(maxScore)
+        };
+      }
+    }
 
     const trips = await Trip.findAll({
-      where: { user_id: userId },
-      include: [{
-        model: User,
-        as: 'user',
-        attributes: ['user_id', 'name', 'email', 'role']
-      }],
-      order: [['start_time', 'DESC']]
+      where: whereClause,
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['user_id', 'name', 'email', 'role']
+        },
+        {
+          model: Score,
+          as: 'score',
+          required: false,
+          where: Object.keys(scoreFilter).length > 0 ? scoreFilter : undefined
+        }
+      ],
+      order: [[sortBy, sortOrder.toUpperCase()]],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
     });
+
+    // Get total count for pagination
+    const totalCount = await Trip.count({ where: whereClause });
 
     res.status(200).json({
       message: 'Trips retrieved successfully',
-      trips
+      trips,
+      pagination: {
+        total: totalCount,
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        hasMore: (parseInt(offset) + parseInt(limit)) < totalCount
+      }
     });
   } catch (error) {
     console.error('Get trips error:', error);
@@ -200,11 +273,205 @@ const deleteTrip = async (req, res) => {
   }
 };
 
+/**
+ * Export trips to CSV
+ * GET /api/trips/export/csv
+ */
+const exportTripsToCSV = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { startDate, endDate } = req.query;
+
+    const whereClause = { user_id: userId };
+    if (startDate || endDate) {
+      whereClause.start_time = {};
+      if (startDate) whereClause.start_time[Op.gte] = new Date(startDate);
+      if (endDate) whereClause.start_time[Op.lte] = new Date(endDate);
+    }
+
+    const trips = await Trip.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['name', 'email']
+        },
+        {
+          model: Score,
+          as: 'score',
+          required: false
+        }
+      ],
+      order: [['start_time', 'DESC']]
+    });
+
+    // Generate CSV
+    const csvHeader = 'Trip ID,User Name,Email,Start Time,End Time,Distance (km),Avg Speed (km/h),Overall Score,Speed Score,Brake Score\n';
+    const csvRows = trips.map(trip => {
+      const startTime = trip.start_time ? new Date(trip.start_time).toISOString() : '';
+      const endTime = trip.end_time ? new Date(trip.end_time).toISOString() : '';
+      const distance = trip.distance_km || '';
+      const avgSpeed = trip.avg_speed || '';
+      const overallScore = trip.score?.overall_score || '';
+      const speedScore = trip.score?.speed_score || '';
+      const brakeScore = trip.score?.brake_score || '';
+
+      return `${trip.trip_id},"${trip.user?.name || ''}","${trip.user?.email || ''}",${startTime},${endTime},${distance},${avgSpeed},${overallScore},${speedScore},${brakeScore}`;
+    }).join('\n');
+
+    const csv = csvHeader + csvRows;
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="trips_export_${new Date().toISOString().split('T')[0]}.csv"`);
+    res.status(200).send(csv);
+  } catch (error) {
+    console.error('Export trips error:', error);
+    res.status(500).json({
+      error: 'Failed to export trips',
+      message: error.message
+    });
+  }
+};
+
+/**
+ * Get family trips (for parents to view teen trips)
+ * GET /api/trips/family
+ */
+const getFamilyTrips = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const user = await User.findByPk(userId);
+
+    if (!user.family_id) {
+      return res.status(404).json({
+        error: 'No family found',
+        message: 'User does not belong to any family'
+      });
+    }
+
+    // Get all family members
+    const familyMembers = await User.findAll({
+      where: { family_id: user.family_id },
+      attributes: ['user_id', 'name', 'role']
+    });
+
+    // Get trips for all family members
+    const trips = await Trip.findAll({
+      where: {
+        user_id: familyMembers.map(m => m.user_id)
+      },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['user_id', 'name', 'email', 'role']
+        },
+        {
+          model: Score,
+          as: 'score',
+          required: false
+        }
+      ],
+      order: [['start_time', 'DESC']]
+    });
+
+    res.status(200).json({
+      message: 'Family trips retrieved successfully',
+      trips,
+      family_members: familyMembers.length
+    });
+  } catch (error) {
+    console.error('Get family trips error:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve family trips',
+      message: error.message
+    });
+  }
+};
+
+/**
+ * Search trips by various criteria
+ * GET /api/trips/search?q=keyword
+ */
+const searchTrips = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { q, startDate, endDate } = req.query;
+
+    if (!q || q.trim().length === 0) {
+      return res.status(400).json({
+        error: 'Search query required',
+        message: 'Please provide a search query'
+      });
+    }
+
+    const whereClause = { user_id: userId };
+
+    // Date filtering
+    if (startDate || endDate) {
+      whereClause.start_time = {};
+      if (startDate) whereClause.start_time[Op.gte] = new Date(startDate);
+      if (endDate) whereClause.start_time[Op.lte] = new Date(endDate);
+    }
+
+    // Get trips and search in related data
+    const trips = await Trip.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['user_id', 'name', 'email', 'role']
+        },
+        {
+          model: Score,
+          as: 'score',
+          required: false
+        }
+      ],
+      order: [['start_time', 'DESC']]
+    });
+
+    // Filter trips based on search query
+    const searchTerm = q.toLowerCase();
+    const filteredTrips = trips.filter(trip => {
+      const userName = trip.user?.name?.toLowerCase() || '';
+      const userEmail = trip.user?.email?.toLowerCase() || '';
+      const tripId = trip.trip_id.toString();
+      const distance = trip.distance_km?.toString() || '';
+      const score = trip.score?.overall_score?.toString() || '';
+
+      return userName.includes(searchTerm) ||
+             userEmail.includes(searchTerm) ||
+             tripId.includes(searchTerm) ||
+             distance.includes(searchTerm) ||
+             score.includes(searchTerm);
+    });
+
+    res.status(200).json({
+      message: 'Search completed successfully',
+      query: q,
+      results: filteredTrips,
+      count: filteredTrips.length
+    });
+  } catch (error) {
+    console.error('Search trips error:', error);
+    res.status(500).json({
+      error: 'Failed to search trips',
+      message: error.message
+    });
+  }
+};
+
 module.exports = {
   getTrips,
   getTripById,
   createTrip,
   updateTrip,
-  deleteTrip
+  deleteTrip,
+  exportTripsToCSV,
+  getFamilyTrips,
+  searchTrips
 };
 

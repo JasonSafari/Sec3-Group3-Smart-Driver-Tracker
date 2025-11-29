@@ -7,7 +7,10 @@ const {
   getTripById,
   createTrip,
   updateTrip,
-  deleteTrip
+  deleteTrip,
+  exportTripsToCSV,
+  getFamilyTrips,
+  searchTrips
 } = require('../controllers/tripController');
 
 // All trip routes require authentication
@@ -79,6 +82,27 @@ router.put('/:id', [
  * @access  Private
  */
 router.delete('/:id', deleteTrip);
+
+/**
+ * @route   GET /api/trips/export/csv
+ * @desc    Export trips to CSV format
+ * @access  Private
+ */
+router.get('/export/csv', exportTripsToCSV);
+
+/**
+ * @route   GET /api/trips/family
+ * @desc    Get all trips for family members
+ * @access  Private
+ */
+router.get('/family', getFamilyTrips);
+
+/**
+ * @route   GET /api/trips/search
+ * @desc    Search trips by keyword
+ * @access  Private
+ */
+router.get('/search', searchTrips);
 
 module.exports = router;
 
