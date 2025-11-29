@@ -4,11 +4,12 @@ const Trip = require('../models/Trip');
 const DataPoint = require('../models/DataPoint');
 
 /**
- * Calculate driving scores based on trip data
+ * Calculate driving scores based on trip data with customizable parameters
  * @param {Array} datapoints - Array of data points from the trip
+ * @param {Object} params - Customizable scoring parameters
  * @returns {Object} - Object with overall_score, speed_score, brake_score
  */
-const calculateScores = (datapoints) => {
+const calculateScores = (datapoints, params = {}) => {
   if (!datapoints || datapoints.length === 0) {
     return {
       overall_score: 0,
@@ -17,9 +18,14 @@ const calculateScores = (datapoints) => {
     };
   }
 
-  // Calculate speed score (penalize for speeding)
-  // Assuming speed limit is 50 km/h (adjust as needed)
-  const SPEED_LIMIT = 50;
+  // Customizable parameters with defaults
+  const SPEED_LIMIT = params.speedLimit || 50;
+  const HARSH_BRAKE_THRESHOLD = params.harshBrakeThreshold || -2.5;
+  const SPEED_PENALTY_MULTIPLIER = params.speedPenaltyMultiplier || 50;
+  const BRAKE_PENALTY_MULTIPLIER = params.brakePenaltyMultiplier || 60;
+  const SPEED_WEIGHT = params.speedWeight || 0.6;
+  const BRAKE_WEIGHT = params.brakeWeight || 0.4;
+
   let speedViolations = 0;
   let totalSpeed = 0;
 
@@ -34,24 +40,28 @@ const calculateScores = (datapoints) => {
 
   const avgSpeed = totalSpeed / datapoints.length;
   const speedViolationRate = speedViolations / datapoints.length;
-  // Speed score: 100 - (violation rate * 50) - (excess speed penalty)
-  const speedScore = Math.max(0, Math.min(100, 100 - (speedViolationRate * 50) - Math.max(0, (avgSpeed - SPEED_LIMIT) * 2)));
+  // Speed score: 100 - (violation rate * penalty) - (excess speed penalty)
+  const speedScore = Math.max(0, Math.min(100, 
+    100 - (speedViolationRate * SPEED_PENALTY_MULTIPLIER) - 
+    Math.max(0, (avgSpeed - SPEED_LIMIT) * 2)
+  ));
 
   // Calculate brake score (penalize for harsh braking)
-  // Harsh braking: acceleration < -2.5 m/s²
   let harshBrakes = 0;
   datapoints.forEach(point => {
-    if (point.acceleration && point.acceleration < -2.5) {
+    if (point.acceleration && point.acceleration < HARSH_BRAKE_THRESHOLD) {
       harshBrakes++;
     }
   });
 
   const brakeViolationRate = harshBrakes / datapoints.length;
-  // Brake score: 100 - (violation rate * 60)
-  const brakeScore = Math.max(0, Math.min(100, 100 - (brakeViolationRate * 60)));
+  // Brake score: 100 - (violation rate * penalty)
+  const brakeScore = Math.max(0, Math.min(100, 
+    100 - (brakeViolationRate * BRAKE_PENALTY_MULTIPLIER)
+  ));
 
-  // Overall score: weighted average (60% speed, 40% brake)
-  const overallScore = (speedScore * 0.6) + (brakeScore * 0.4);
+  // Overall score: weighted average
+  const overallScore = (speedScore * SPEED_WEIGHT) + (brakeScore * BRAKE_WEIGHT);
 
   return {
     overall_score: parseFloat(overallScore.toFixed(2)),
@@ -104,13 +114,21 @@ const createScore = async (req, res) => {
 };
 
 /**
- * Calculate and create score from trip data points
+ * Calculate and create score from trip data points with customizable parameters
  * POST /api/scores/calculate/:tripId
  */
 const calculateScoreFromTrip = async (req, res) => {
   try {
     const { tripId } = req.params;
     const userId = req.user.userId;
+    const {
+      speedLimit,
+      harshBrakeThreshold,
+      speedPenaltyMultiplier,
+      brakePenaltyMultiplier,
+      speedWeight,
+      brakeWeight
+    } = req.body;
 
     // Verify trip belongs to user
     const trip = await Trip.findOne({
@@ -132,8 +150,29 @@ const calculateScoreFromTrip = async (req, res) => {
       order: [['timestamp', 'ASC']]
     });
 
-    // Calculate scores
-    const scores = calculateScores(datapoints);
+    // Build custom parameters object
+    const customParams = {};
+    if (speedLimit !== undefined) customParams.speedLimit = parseFloat(speedLimit);
+    if (harshBrakeThreshold !== undefined) customParams.harshBrakeThreshold = parseFloat(harshBrakeThreshold);
+    if (speedPenaltyMultiplier !== undefined) customParams.speedPenaltyMultiplier = parseFloat(speedPenaltyMultiplier);
+    if (brakePenaltyMultiplier !== undefined) customParams.brakePenaltyMultiplier = parseFloat(brakePenaltyMultiplier);
+    if (speedWeight !== undefined) customParams.speedWeight = parseFloat(speedWeight);
+    if (brakeWeight !== undefined) customParams.brakeWeight = parseFloat(brakeWeight);
+
+    // Validate weights sum to 1.0
+    if (customParams.speedWeight !== undefined || customParams.brakeWeight !== undefined) {
+      const finalSpeedWeight = customParams.speedWeight || 0.6;
+      const finalBrakeWeight = customParams.brakeWeight || 0.4;
+      if (Math.abs((finalSpeedWeight + finalBrakeWeight) - 1.0) > 0.01) {
+        return res.status(400).json({
+          error: 'Invalid weights',
+          message: 'speedWeight and brakeWeight must sum to 1.0'
+        });
+      }
+    }
+
+    // Calculate scores with custom parameters
+    const scores = calculateScores(datapoints, customParams);
 
     // Create or update score
     let score;
@@ -152,7 +191,8 @@ const calculateScoreFromTrip = async (req, res) => {
     res.status(200).json({
       message: 'Score calculated successfully',
       score,
-      trip_id: tripId
+      trip_id: tripId,
+      parameters_used: customParams
     });
   } catch (error) {
     console.error('Calculate score error:', error);

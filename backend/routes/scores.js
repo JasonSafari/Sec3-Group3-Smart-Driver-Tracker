@@ -48,10 +48,31 @@ router.post('/', [
 
 /**
  * @route   POST /api/scores/calculate/:tripId
- * @desc    Calculate and create score from trip data points
+ * @desc    Calculate and create score from trip data points with customizable parameters
  * @access  Private
+ * @body    Optional: speedLimit, harshBrakeThreshold, speedPenaltyMultiplier, 
+ *          brakePenaltyMultiplier, speedWeight, brakeWeight
  */
-router.post('/calculate/:tripId', calculateScoreFromTrip);
+router.post('/calculate/:tripId', [
+  body('speedLimit')
+    .optional()
+    .isFloat({ min: 1, max: 200 }).withMessage('Speed limit must be between 1 and 200 km/h'),
+  body('harshBrakeThreshold')
+    .optional()
+    .isFloat({ max: 0 }).withMessage('Harsh brake threshold must be negative'),
+  body('speedPenaltyMultiplier')
+    .optional()
+    .isFloat({ min: 0, max: 100 }).withMessage('Speed penalty multiplier must be between 0 and 100'),
+  body('brakePenaltyMultiplier')
+    .optional()
+    .isFloat({ min: 0, max: 100 }).withMessage('Brake penalty multiplier must be between 0 and 100'),
+  body('speedWeight')
+    .optional()
+    .isFloat({ min: 0, max: 1 }).withMessage('Speed weight must be between 0 and 1'),
+  body('brakeWeight')
+    .optional()
+    .isFloat({ min: 0, max: 1 }).withMessage('Brake weight must be between 0 and 1')
+], calculateScoreFromTrip);
 
 module.exports = router;
 
