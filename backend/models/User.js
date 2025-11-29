@@ -31,14 +31,14 @@ const User = sequelize.define('User', {
       this.setDataValue('email', value.toLowerCase());
     }
   },
- password: {
-  type: DataTypes.VIRTUAL,
-  allowNull: true,  // Changed from false to true
-  validate: {
-    notEmpty: { msg: 'Password is required' },
-    len: { args: [8, 255], msg: 'Password must be at least 8 characters' }
-  }
-},
+  password: {
+    type: DataTypes.VIRTUAL,
+    allowNull: true,  // Changed from false to true
+    validate: {
+      notEmpty: { msg: 'Password is required' },
+      len: { args: [8, 255], msg: 'Password must be at least 8 characters' }
+    }
+  },
   password_hash: {
     type: DataTypes.STRING(255),
     allowNull: false,
@@ -62,8 +62,8 @@ const User = sequelize.define('User', {
 }, {
   tableName: 'users',
   timestamps: false,
-  underscored: true
-  // Hooks removed - password hashing is handled in the controller
+  underscored: true,
+
 });
 
 // Instance method to compare passwords
@@ -78,6 +78,9 @@ User.prototype.toJSON = function() {
   delete values.password_hash;
   return values;
 };
+
+// Define associations after model is exported to avoid circular dependencies
+// This will be set up after Trip model is loaded
 
 module.exports = User;
 
