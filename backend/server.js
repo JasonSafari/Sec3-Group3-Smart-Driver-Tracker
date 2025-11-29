@@ -22,14 +22,25 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Load model associations
+require('./models/associations');
+
 // Routes
 const authRoutes = require('./routes/auth');
 const testRoutes = require('./routes/test');
 const tripRoutes = require('./routes/trips');
+const familyRoutes = require('./routes/families');
+const scoreRoutes = require('./routes/scores');
+const dataPointRoutes = require('./routes/datapoints');
+const analyticsRoutes = require('./routes/analytics');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/test', testRoutes);
 app.use('/api/trips', tripRoutes);
+app.use('/api/families', familyRoutes);
+app.use('/api/scores', scoreRoutes);
+app.use('/api/datapoints', dataPointRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
