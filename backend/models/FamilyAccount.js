@@ -34,5 +34,39 @@ const FamilyAccount = sequelize.define('FamilyAccount', {
   underscored: true
 });
 
+/**
+ * Generate a random 6-character invite code
+ * Format: A1B2C3 (alphanumeric, uppercase)
+ * @returns {string} 6-character invite code
+ */
+FamilyAccount.prototype.generateInviteCode = function() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+};
+
+/**
+ * Check if invite code is valid (created within 48 hours)
+ * Note: This requires a created_at field in the database
+ * If created_at doesn't exist, this will always return true
+ * @returns {boolean} True if code is valid
+ */
+FamilyAccount.prototype.isInviteCodeValid = function() {
+  // If database doesn't have created_at, we can't check expiration
+  // Return true as a fallback
+  if (!this.created_at) {
+    return true;
+  }
+
+  const createdAt = new Date(this.created_at);
+  const now = new Date();
+  const hoursSinceCreation = (now - createdAt) / (1000 * 60 * 60);
+  
+  return hoursSinceCreation < 48;
+};
+
 module.exports = FamilyAccount;
 

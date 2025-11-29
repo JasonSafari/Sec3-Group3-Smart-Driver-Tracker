@@ -33,10 +33,9 @@ const User = sequelize.define('User', {
   },
   password: {
     type: DataTypes.VIRTUAL,
-    allowNull: true,  // Changed from false to true
+    allowNull: true, // Allow null since we hash in controller and set password_hash directly
     validate: {
-      notEmpty: { msg: 'Password is required' },
-      len: { args: [8, 255], msg: 'Password must be at least 8 characters' }
+      // Validation is handled in the controller/route level
     }
   },
   password_hash: {
@@ -61,9 +60,26 @@ const User = sequelize.define('User', {
   }
 }, {
   tableName: 'users',
-  timestamps: false,
+  timestamps: false, // Database schema doesn't include created_at/updated_at
   underscored: true,
-
+  hooks: {
+    beforeCreate: async (user) => {
+      if (user.password) {
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(user.password, salt);
+        user.setDataValue('password_hash', hashedPassword);
+      } else if (!user.password_hash) {
+        throw new Error('Password is required');
+      }
+    },
+    beforeUpdate: async (user) => {
+      if (user.changed('password') && user.password) {
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(user.password, salt);
+        user.setDataValue('password_hash', hashedPassword);
+      }
+    }
+  }
 });
 
 // Instance method to compare passwords

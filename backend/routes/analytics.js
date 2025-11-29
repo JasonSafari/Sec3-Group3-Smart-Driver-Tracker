@@ -5,7 +5,9 @@ const {
   getTripSummary,
   getPerformanceTrends,
   getSafetyMetrics,
-  getFamilyAnalytics
+  getFamilyAnalytics,
+  getUserStatistics,
+  getScoreHistoryData
 } = require('../controllers/analyticsController');
 
 // All analytics routes require authentication
@@ -39,6 +41,21 @@ router.get('/safety', getSafetyMetrics);
  * @access  Private
  */
 router.get('/family', getFamilyAnalytics);
+
+/**
+ * @route   GET /api/analytics/user/:userId?
+ * @desc    Get user statistics
+ * @access  Private
+ */
+router.get('/user/:userId?', getUserStatistics);
+
+/**
+ * @route   GET /api/analytics/scores/:userId
+ * @desc    Get score history for a user
+ * @access  Private
+ * @query   startDate?, endDate?
+ */
+router.get('/scores/:userId', getScoreHistoryData);
 
 module.exports = router;
 

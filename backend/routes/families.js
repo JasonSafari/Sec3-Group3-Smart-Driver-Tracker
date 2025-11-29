@@ -34,11 +34,11 @@ router.post('/', [
 router.get('/me', getMyFamily);
 
 /**
- * @route   GET /api/families/:id
- * @desc    Get family account by ID
+ * @route   GET /api/families/members
+ * @desc    Get all members of user's family (checklist endpoint)
  * @access  Private
  */
-router.get('/:id', getFamily);
+router.get('/members', getFamilyMembers);
 
 /**
  * @route   GET /api/families/:id/members
@@ -46,6 +46,13 @@ router.get('/:id', getFamily);
  * @access  Private
  */
 router.get('/:id/members', getFamilyMembers);
+
+/**
+ * @route   GET /api/families/:id
+ * @desc    Get family account by ID
+ * @access  Private
+ */
+router.get('/:id', getFamily);
 
 /**
  * @route   POST /api/families/join
@@ -66,6 +73,18 @@ router.post('/join', [
  * @access  Private
  */
 router.post('/leave', leaveFamily);
+
+/**
+ * @route   POST /api/families/create
+ * @desc    Create a new family account (checklist endpoint)
+ * @access  Private
+ */
+router.post('/create', [
+  body('family_name')
+    .trim()
+    .notEmpty().withMessage('Family name is required')
+    .isLength({ min: 1, max: 100 }).withMessage('Family name must be between 1 and 100 characters')
+], createFamily);
 
 module.exports = router;
 

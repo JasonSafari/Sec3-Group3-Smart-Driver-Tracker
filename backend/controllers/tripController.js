@@ -12,8 +12,10 @@ const DataPoint = require('../models/DataPoint');
  */
 const getTrips = async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const currentUserId = req.user.userId;
+    const currentUser = await User.findByPk(currentUserId);
     const {
+      userId: queryUserId, // For parents viewing teen trips
       startDate,
       endDate,
       minDistance,
@@ -26,8 +28,32 @@ const getTrips = async (req, res) => {
       sortOrder = 'DESC'
     } = req.query;
 
+    // Determine which user's trips to fetch
+    let targetUserId = currentUserId;
+    
+    if (queryUserId && parseInt(queryUserId) !== currentUserId) {
+      // Parent viewing teen's trips
+      if (currentUser.role !== 'parent') {
+        return res.status(403).json({
+          error: 'Access denied',
+          message: 'Only parents can view other users\' trips'
+        });
+      }
+
+      // Verify target user is in same family
+      const targetUser = await User.findByPk(queryUserId);
+      if (!targetUser || targetUser.family_id !== currentUser.family_id) {
+        return res.status(403).json({
+          error: 'Access denied',
+          message: 'Can only view trips from family members'
+        });
+      }
+
+      targetUserId = parseInt(queryUserId);
+    }
+
     // Build where clause
-    const whereClause = { user_id: userId };
+    const whereClause = { user_id: targetUserId };
 
     // Date filtering
     if (startDate || endDate) {
@@ -464,6 +490,447 @@ const searchTrips = async (req, res) => {
   }
 };
 
+/**
+ * Start a new trip
+ * POST /api/trips/start
+ */
+const startTrip = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        errors: errors.array()
+      });
+    }
+
+    const userId = req.user.userId;
+    const { start_latitude, start_longitude, weather_condition } = req.body;
+
+    // Validate coordinates
+    const { isValidLatitude, isValidLongitude } = require('../utils/validators');
+    if (!isValidLatitude(start_latitude) || !isValidLongitude(start_longitude)) {
+      return res.status(400).json({
+        error: 'Invalid coordinates',
+        message: 'Latitude must be between -90 and 90, longitude between -180 and 180'
+      });
+    }
+
+    // Create trip with start time and coordinates
+    // Note: Database schema doesn't have start_latitude/start_longitude fields
+    // We'll store them in the first datapoint instead
+    const trip = await Trip.create({
+      user_id: userId,
+      start_time: new Date(),
+      end_time: null,
+      distance_km: null,
+      avg_speed: null,
+      score_id: null
+    });
+
+    // Create initial datapoint with start coordinates
+    if (start_latitude && start_longitude) {
+      await DataPoint.create({
+        trip_id: trip.trip_id,
+        timestamp: new Date(),
+        latitude: start_latitude,
+        longitude: start_longitude,
+        speed: 0,
+        acceleration: 0
+      });
+    }
+
+    res.status(201).json({
+      message: 'Trip started successfully',
+      trip: {
+        trip_id: trip.trip_id,
+        user_id: trip.user_id,
+        start_time: trip.start_time,
+        start_latitude,
+        start_longitude,
+        weather_condition
+      }
+    });
+  } catch (error) {
+    console.error('Start trip error:', error);
+    res.status(500).json({
+      error: 'Failed to start trip',
+      message: error.message
+    });
+  }
+};
+
+/**
+ * Upload data points for a trip
+ * POST /api/trips/:trip_id/datapoints
+ */
+const uploadDataPoints = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        errors: errors.array()
+      });
+    }
+
+    const { trip_id } = req.params;
+    const userId = req.user.userId;
+    const { datapoints } = req.body;
+
+    if (!Array.isArray(datapoints) || datapoints.length === 0) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'datapoints must be a non-empty array'
+      });
+    }
+
+    // Verify trip belongs to user
+    const trip = await Trip.findOne({
+      where: {
+        trip_id,
+        user_id: userId
+      }
+    });
+
+    if (!trip) {
+      return res.status(404).json({
+        error: 'Trip not found',
+        message: 'Trip does not exist or does not belong to you'
+      });
+    }
+
+    // Check if trip is still in progress (end_time is null)
+    if (trip.end_time) {
+      return res.status(400).json({
+        error: 'Trip already completed',
+        message: 'Cannot add data points to a completed trip'
+      });
+    }
+
+    // Validate and prepare data points
+    const { isValidLatitude, isValidLongitude } = require('../utils/validators');
+    const dataPointsToCreate = datapoints.map(dp => {
+      if (dp.latitude && !isValidLatitude(dp.latitude)) {
+        throw new Error(`Invalid latitude: ${dp.latitude}`);
+      }
+      if (dp.longitude && !isValidLongitude(dp.longitude)) {
+        throw new Error(`Invalid longitude: ${dp.longitude}`);
+      }
+
+      return {
+        trip_id: parseInt(trip_id),
+        timestamp: dp.timestamp ? new Date(dp.timestamp) : new Date(),
+        latitude: dp.latitude,
+        longitude: dp.longitude,
+        speed: dp.speed,
+        acceleration: dp.acceleration
+      };
+    });
+
+    // Bulk create data points
+    const createdDataPoints = await DataPoint.bulkCreate(dataPointsToCreate);
+
+    res.status(201).json({
+      message: 'Data points uploaded successfully',
+      count: createdDataPoints.length,
+      trip_id: parseInt(trip_id)
+    });
+  } catch (error) {
+    console.error('Upload data points error:', error);
+    res.status(500).json({
+      error: 'Failed to upload data points',
+      message: error.message
+    });
+  }
+};
+
+/**
+ * Stop a trip and calculate score
+ * POST /api/trips/:trip_id/stop
+ */
+const stopTrip = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        errors: errors.array()
+      });
+    }
+
+    const { trip_id } = req.params;
+    const userId = req.user.userId;
+    const { end_latitude, end_longitude } = req.body;
+
+    // Validate coordinates if provided
+    if (end_latitude !== undefined || end_longitude !== undefined) {
+      const { isValidLatitude, isValidLongitude } = require('../utils/validators');
+      if (end_latitude !== undefined && !isValidLatitude(end_latitude)) {
+        return res.status(400).json({
+          error: 'Invalid end latitude'
+        });
+      }
+      if (end_longitude !== undefined && !isValidLongitude(end_longitude)) {
+        return res.status(400).json({
+          error: 'Invalid end longitude'
+        });
+      }
+    }
+
+    // Verify trip belongs to user
+    const trip = await Trip.findOne({
+      where: {
+        trip_id,
+        user_id: userId
+      }
+    });
+
+    if (!trip) {
+      return res.status(404).json({
+        error: 'Trip not found',
+        message: 'Trip does not exist or does not belong to you'
+      });
+    }
+
+    // Check if trip is already completed
+    if (trip.end_time) {
+      return res.status(400).json({
+        error: 'Trip already completed',
+        message: 'This trip has already been stopped'
+      });
+    }
+
+    // Get all data points for this trip
+    const datapoints = await DataPoint.findAll({
+      where: { trip_id },
+      order: [['timestamp', 'ASC']]
+    });
+
+    if (datapoints.length === 0) {
+      return res.status(400).json({
+        error: 'No data points',
+        message: 'Cannot stop trip without data points'
+      });
+    }
+
+    // Calculate distance using first and last datapoint
+    const { calculateDistance } = require('../utils/distanceCalculator');
+    let distance_km = 0;
+    
+    if (datapoints.length > 1) {
+      const first = datapoints[0];
+      const last = datapoints[datapoints.length - 1];
+      
+      if (first.latitude && first.longitude && last.latitude && last.longitude) {
+        distance_km = calculateDistance(
+          parseFloat(first.latitude),
+          parseFloat(first.longitude),
+          parseFloat(last.latitude),
+          parseFloat(last.longitude)
+        );
+      }
+    }
+
+    // Add end datapoint if coordinates provided
+    if (end_latitude && end_longitude) {
+      await DataPoint.create({
+        trip_id: parseInt(trip_id),
+        timestamp: new Date(),
+        latitude: end_latitude,
+        longitude: end_longitude,
+        speed: 0,
+        acceleration: 0
+      });
+    }
+
+    // Calculate average speed
+    let totalSpeed = 0;
+    let speedCount = 0;
+    datapoints.forEach(dp => {
+      if (dp.speed) {
+        totalSpeed += parseFloat(dp.speed);
+        speedCount++;
+      }
+    });
+    const avg_speed = speedCount > 0 ? totalSpeed / speedCount : 0;
+
+    // Calculate score using scoring service
+    const { calculateScore } = require('../services/scoringService');
+    const scoreData = calculateScore(datapoints);
+
+    // Create score record
+    const score = await Score.create({
+      overall_score: scoreData.overall_score,
+      speed_score: scoreData.speed_score,
+      brake_score: scoreData.brake_score
+    });
+
+    // Update trip
+    trip.end_time = new Date();
+    trip.distance_km = distance_km;
+    trip.avg_speed = avg_speed;
+    trip.score_id = score.score_id;
+    await trip.save();
+
+    res.status(200).json({
+      message: 'Trip stopped successfully',
+      trip: {
+        trip_id: trip.trip_id,
+        user_id: trip.user_id,
+        start_time: trip.start_time,
+        end_time: trip.end_time,
+        distance_km: trip.distance_km,
+        avg_speed: trip.avg_speed,
+        score_id: trip.score_id
+      },
+      score: {
+        score_id: score.score_id,
+        overall_score: score.overall_score,
+        speed_score: score.speed_score,
+        brake_score: score.brake_score,
+        speeding_events: scoreData.speeding_events,
+        harsh_brakes: scoreData.harsh_brakes
+      }
+    });
+  } catch (error) {
+    console.error('Stop trip error:', error);
+    res.status(500).json({
+      error: 'Failed to stop trip',
+      message: error.message
+    });
+  }
+};
+
+/**
+ * Get user trips with optional userId parameter (for parents viewing teens)
+ * GET /api/trips?userId=...
+ */
+const getUserTrips = async (req, res) => {
+  try {
+    const { userId: queryUserId, limit = 20, offset = 0 } = req.query;
+    const currentUserId = req.user.userId;
+    const currentUser = await User.findByPk(currentUserId);
+
+    // Determine which user's trips to fetch
+    let targetUserId = currentUserId;
+    
+    if (queryUserId && parseInt(queryUserId) !== currentUserId) {
+      // Parent viewing teen's trips
+      if (currentUser.role !== 'parent') {
+        return res.status(403).json({
+          error: 'Access denied',
+          message: 'Only parents can view other users\' trips'
+        });
+      }
+
+      // Verify target user is in same family
+      const targetUser = await User.findByPk(queryUserId);
+      if (!targetUser || targetUser.family_id !== currentUser.family_id) {
+        return res.status(403).json({
+          error: 'Access denied',
+          message: 'Can only view trips from family members'
+        });
+      }
+
+      targetUserId = parseInt(queryUserId);
+    }
+
+    // Get trips
+    const trips = await Trip.findAll({
+      where: { user_id: targetUserId },
+      include: [{
+        model: Score,
+        as: 'score',
+        required: false
+      }],
+      order: [['start_time', 'DESC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+
+    const total = await Trip.count({ where: { user_id: targetUserId } });
+    const totalPages = Math.ceil(total / parseInt(limit));
+
+    res.status(200).json({
+      message: 'Trips retrieved successfully',
+      trips,
+      total,
+      page: Math.floor(parseInt(offset) / parseInt(limit)) + 1,
+      totalPages,
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+  } catch (error) {
+    console.error('Get user trips error:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve trips',
+      message: error.message
+    });
+  }
+};
+
+/**
+ * Get trip details with datapoints
+ * GET /api/trips/:trip_id
+ */
+const getTripDetails = async (req, res) => {
+  try {
+    const { trip_id } = req.params;
+    const currentUserId = req.user.userId;
+    const currentUser = await User.findByPk(currentUserId);
+
+    // Get trip
+    const trip = await Trip.findByPk(trip_id, {
+      include: [{
+        model: Score,
+        as: 'score',
+        required: false
+      }]
+    });
+
+    if (!trip) {
+      return res.status(404).json({
+        error: 'Trip not found'
+      });
+    }
+
+    // Verify permission (same user OR parent viewing teen in same family)
+    if (trip.user_id !== currentUserId) {
+      if (currentUser.role !== 'parent') {
+        return res.status(403).json({
+          error: 'Access denied',
+          message: 'You can only view your own trips'
+        });
+      }
+
+      const tripOwner = await User.findByPk(trip.user_id);
+      if (!tripOwner || tripOwner.family_id !== currentUser.family_id) {
+        return res.status(403).json({
+          error: 'Access denied',
+          message: 'Can only view trips from family members'
+        });
+      }
+    }
+
+    // Get datapoints
+    const datapoints = await DataPoint.findAll({
+      where: { trip_id },
+      order: [['timestamp', 'ASC']]
+    });
+
+    res.status(200).json({
+      message: 'Trip details retrieved successfully',
+      trip,
+      datapoints,
+      score: trip.score
+    });
+  } catch (error) {
+    console.error('Get trip details error:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve trip details',
+      message: error.message
+    });
+  }
+};
+
 module.exports = {
   getTrips,
   getTripById,
@@ -472,6 +939,11 @@ module.exports = {
   deleteTrip,
   exportTripsToCSV,
   getFamilyTrips,
-  searchTrips
+  searchTrips,
+  startTrip,
+  uploadDataPoints,
+  stopTrip,
+  getUserTrips,
+  getTripDetails
 };
 

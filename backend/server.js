@@ -23,7 +23,7 @@ app.get('/health', (req, res) => {
 });
 
 // Load model associations
-require('./models/associations');
+require('./models/index');
 
 // Routes
 const authRoutes = require('./routes/auth');
@@ -44,14 +44,9 @@ app.use('/api/datapoints', dataPointRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/routes', routeAnalysisRoutes);
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ 
-    error: 'Something went wrong!',
-    message: err.message 
-  });
-});
+// Error handling middleware (must be last)
+const errorHandler = require('./middleware/errorHandler');
+app.use(errorHandler);
 
 // Start server
 app.listen(PORT, () => {

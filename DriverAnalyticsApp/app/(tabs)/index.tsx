@@ -1,15 +1,132 @@
 import { Image } from 'expo-image';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 
 import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useAuth } from '@/hooks/use-auth';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { user, token, loading } = useAuth();
 
+  // Only redirect on initial app load, not when navigating back
+  const redirectRef = React.useRef(false);
+
+  useEffect(() => {
+    // Reset redirect ref when user logs out
+    if (!token || !user) {
+      redirectRef.current = false;
+      // If not logged in and on home screen, redirect to login
+      // Use a small delay to prevent navigation conflicts
+      if (!loading) {
+        const timer = setTimeout(() => {
+          router.replace('/login');
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+      return;
+    }
+    
+    // Only redirect once on initial app load if user is logged in
+    // Use ref to prevent multiple redirects
+    if (!loading && !redirectRef.current && token && user) {
+      redirectRef.current = true;
+      
+      // Small delay to ensure navigation is ready
+      const timer = setTimeout(() => {
+        // Redirect based on role and family status (only on initial load)
+        if (user.role === 'teen') {
+          if (!user.family_id) {
+            router.replace('/join-family');
+          } else {
+            router.replace('/teen-dashboard');
+          }
+        } else if (user.role === 'parent') {
+          if (!user.family_id) {
+            router.replace('/create-family');
+          } else {
+            router.replace('/parent-dashboard');
+          }
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [loading, token, user, router]);
+
+  // Show login/register screen if not logged in
+  if (!loading && (!token || !user)) {
+    return (
+      <ParallaxScrollView
+        headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
+        headerImage={
+          <Image
+            source={require('@/assets/images/partial-react-logo.png')}
+            style={styles.reactLogo}
+          />
+        }>
+        <ThemedView style={styles.titleContainer}>
+          <ThemedText type="title">Driver Analytics</ThemedText>
+          <HelloWave />
+        </ThemedView>
+        <ThemedView style={styles.stepContainer}>
+          <ThemedText type="subtitle">Monitor and improve teen driving</ThemedText>
+          <ThemedText>
+            Sign in or create an account to start tracking trips and driver performance.
+          </ThemedText>
+        </ThemedView>
+
+        <View style={styles.authRow}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.button,
+              styles.primaryButton,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={() => router.push('/login')}
+          >
+            <ThemedText type="defaultSemiBold" style={styles.primaryButtonText}>
+              Sign in
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.button,
+              styles.secondaryButton,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={() => router.push('/register')}
+          >
+            <ThemedText type="defaultSemiBold" style={styles.secondaryButtonText}>
+              Create account
+            </ThemedText>
+          </Pressable>
+        </View>
+
+        <ThemedView style={styles.stepContainer}>
+          <ThemedText type="subtitle">Developer tips</ThemedText>
+          <ThemedText>
+            Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to customize this
+            screen. Press{' '}
+            <ThemedText type="defaultSemiBold">
+              {Platform.select({
+                ios: 'cmd + d',
+                android: 'cmd + m',
+                web: 'F12',
+              })}
+            </ThemedText>{' '}
+            to open developer tools.
+          </ThemedText>
+        </ThemedView>
+      </ParallaxScrollView>
+    );
+  }
+
+  // If logged in, show a simple home screen
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
@@ -24,52 +141,9 @@ export default function HomeScreen() {
         <HelloWave />
       </ThemedView>
       <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Monitor and improve teen driving</ThemedText>
+        <ThemedText type="subtitle">Welcome back, {user?.name}</ThemedText>
         <ThemedText>
-          Sign in or create an account to start tracking trips and driver performance.
-        </ThemedText>
-      </ThemedView>
-
-      <View style={styles.authRow}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.button,
-            styles.primaryButton,
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={() => router.push('/login')}
-        >
-          <ThemedText type="defaultSemiBold" style={styles.primaryButtonText}>
-            Sign in
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          style={({ pressed }) => [
-            styles.button,
-            styles.secondaryButton,
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={() => router.push('/register')}
-        >
-          <ThemedText type="defaultSemiBold" style={styles.secondaryButtonText}>
-            Create account
-          </ThemedText>
-        </Pressable>
-      </View>
-
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Developer tips</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to customize this
-          screen. Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
+          Use the tabs below to navigate to your dashboard, trips, or profile.
         </ThemedText>
       </ThemedView>
     </ParallaxScrollView>

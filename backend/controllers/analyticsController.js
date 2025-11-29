@@ -3,7 +3,7 @@ const Trip = require('../models/Trip');
 const User = require('../models/User');
 const Score = require('../models/Score');
 const DataPoint = require('../models/DataPoint');
-const { calculateScores } = require('./scoreController');
+const { getUserStats, getScoreHistory, getFamilyStats } = require('../services/analyticsService');
 
 /**
  * Get trip summary statistics for authenticated user
@@ -217,14 +217,116 @@ const getSafetyMetrics = async (req, res) => {
 };
 
 /**
+ * Get user statistics
+ * GET /api/analytics/user/:userId?
+ */
+const getUserStatistics = async (req, res) => {
+  try {
+    const { userId: queryUserId } = req.params;
+    const currentUserId = req.user.userId;
+    const currentUser = await User.findByPk(currentUserId);
+
+    // Determine target user
+    let targetUserId = currentUserId;
+    
+    if (queryUserId && parseInt(queryUserId) !== currentUserId) {
+      // Parent viewing teen's stats
+      if (currentUser.role !== 'parent') {
+        return res.status(403).json({
+          error: 'Access denied',
+          message: 'Only parents can view other users\' statistics'
+        });
+      }
+
+      const targetUser = await User.findByPk(queryUserId);
+      if (!targetUser || targetUser.family_id !== currentUser.family_id) {
+        return res.status(403).json({
+          error: 'Access denied',
+          message: 'Can only view statistics from family members'
+        });
+      }
+
+      targetUserId = parseInt(queryUserId);
+    }
+
+    const stats = await getUserStats(targetUserId);
+
+    res.status(200).json({
+      message: 'User statistics retrieved successfully',
+      stats
+    });
+  } catch (error) {
+    console.error('Get user statistics error:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve user statistics',
+      message: error.message
+    });
+  }
+};
+
+/**
+ * Get score history
+ * GET /api/analytics/scores/:userId
+ */
+const getScoreHistoryData = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const currentUserId = req.user.userId;
+    const currentUser = await User.findByPk(currentUserId);
+
+    // Verify permission
+    if (parseInt(userId) !== currentUserId) {
+      if (currentUser.role !== 'parent') {
+        return res.status(403).json({
+          error: 'Access denied',
+          message: 'Only parents can view other users\' score history'
+        });
+      }
+
+      const targetUser = await User.findByPk(userId);
+      if (!targetUser || targetUser.family_id !== currentUser.family_id) {
+        return res.status(403).json({
+          error: 'Access denied',
+          message: 'Can only view score history from family members'
+        });
+      }
+    }
+
+    const { startDate, endDate } = req.query;
+    const start = startDate ? new Date(startDate) : null;
+    const end = endDate ? new Date(endDate) : null;
+
+    const history = await getScoreHistory(parseInt(userId), start, end);
+
+    res.status(200).json({
+      message: 'Score history retrieved successfully',
+      ...history
+    });
+  } catch (error) {
+    console.error('Get score history error:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve score history',
+      message: error.message
+    });
+  }
+};
+
+/**
  * Get family analytics (for parents)
  * GET /api/analytics/family
  */
 const getFamilyAnalytics = async (req, res) => {
   try {
     const userId = req.user.userId;
-
     const user = await User.findByPk(userId);
+
+    if (user.role !== 'parent') {
+      return res.status(403).json({
+        error: 'Access denied',
+        message: 'Only parents can view family analytics'
+      });
+    }
+
     if (!user.family_id) {
       return res.status(404).json({
         error: 'No family found',
@@ -232,74 +334,11 @@ const getFamilyAnalytics = async (req, res) => {
       });
     }
 
-    // Get all family members
-    const familyMembers = await User.findAll({
-      where: { family_id: user.family_id },
-      attributes: ['user_id', 'name', 'email', 'role']
-    });
-
-    // Get trips for all family members
-    const familyTrips = await Trip.findAll({
-      where: {
-        user_id: familyMembers.map(m => m.user_id)
-      },
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['user_id', 'name', 'role']
-        },
-        {
-          model: Score,
-          as: 'score',
-          required: false
-        }
-      ],
-      order: [['start_time', 'DESC']]
-    });
-
-    // Calculate per-member statistics
-    const memberStats = {};
-    familyMembers.forEach(member => {
-      memberStats[member.user_id] = {
-        user_id: member.user_id,
-        name: member.name,
-        role: member.role,
-        total_trips: 0,
-        total_distance: 0,
-        average_score: 0,
-        total_scores: 0,
-        score_count: 0
-      };
-    });
-
-    familyTrips.forEach(trip => {
-      const stats = memberStats[trip.user_id];
-      if (stats) {
-        stats.total_trips++;
-        if (trip.distance_km) {
-          stats.total_distance += parseFloat(trip.distance_km);
-        }
-        if (trip.score && trip.score.overall_score) {
-          stats.total_scores += parseFloat(trip.score.overall_score);
-          stats.score_count++;
-        }
-      }
-    });
-
-    // Calculate averages
-    Object.values(memberStats).forEach(stats => {
-      stats.average_score = stats.score_count > 0
-        ? parseFloat((stats.total_scores / stats.score_count).toFixed(2))
-        : 0;
-      stats.total_distance = parseFloat(stats.total_distance.toFixed(2));
-    });
+    const familyStats = await getFamilyStats(user.family_id);
 
     res.status(200).json({
       message: 'Family analytics retrieved successfully',
-      family_id: user.family_id,
-      members: Object.values(memberStats),
-      total_family_trips: familyTrips.length
+      ...familyStats
     });
   } catch (error) {
     console.error('Get family analytics error:', error);
@@ -314,6 +353,8 @@ module.exports = {
   getTripSummary,
   getPerformanceTrends,
   getSafetyMetrics,
-  getFamilyAnalytics
+  getFamilyAnalytics,
+  getUserStatistics,
+  getScoreHistoryData
 };
 

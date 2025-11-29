@@ -275,29 +275,51 @@ const leaveFamily = async (req, res) => {
 
 /**
  * Get all family members
- * GET /api/families/:id/members
+ * GET /api/families/:id/members or GET /api/families/members
  */
 const getFamilyMembers = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.userId;
 
+    // Get current user's family_id
     const user = await User.findByPk(userId);
-    if (!user.family_id || user.family_id !== parseInt(id)) {
+    if (!user.family_id) {
+      return res.status(404).json({
+        error: 'Not in a family',
+        message: 'User does not belong to any family'
+      });
+    }
+
+    // If id param provided, verify it matches user's family
+    if (id && parseInt(id) !== user.family_id) {
       return res.status(403).json({
         error: 'Access denied',
         message: 'You can only access your own family members'
       });
     }
 
+    // Get family account
+    const family = await FamilyAccount.findByPk(user.family_id);
+    if (!family) {
+      return res.status(404).json({
+        error: 'Family not found'
+      });
+    }
+
+    // Get all family members
     const members = await User.findAll({
-      where: { family_id: id },
+      where: { family_id: user.family_id },
       attributes: ['user_id', 'name', 'email', 'role'],
       order: [['name', 'ASC']]
     });
 
     res.status(200).json({
       message: 'Family members retrieved successfully',
+      family: {
+        family_id: family.family_id,
+        family_name: family.family_name
+      },
       members
     });
   } catch (error) {

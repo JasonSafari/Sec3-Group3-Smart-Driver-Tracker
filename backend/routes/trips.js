@@ -10,7 +10,12 @@ const {
   deleteTrip,
   exportTripsToCSV,
   getFamilyTrips,
-  searchTrips
+  searchTrips,
+  startTrip,
+  uploadDataPoints,
+  stopTrip,
+  getUserTrips,
+  getTripDetails
 } = require('../controllers/tripController');
 
 // All trip routes require authentication
@@ -103,6 +108,70 @@ router.get('/family', getFamilyTrips);
  * @access  Private
  */
 router.get('/search', searchTrips);
+
+/**
+ * @route   POST /api/trips/start
+ * @desc    Start a new trip
+ * @access  Private
+ */
+router.post('/start', [
+  body('start_latitude')
+    .notEmpty().withMessage('Start latitude is required')
+    .isFloat({ min: -90, max: 90 }).withMessage('Latitude must be between -90 and 90'),
+  body('start_longitude')
+    .notEmpty().withMessage('Start longitude is required')
+    .isFloat({ min: -180, max: 180 }).withMessage('Longitude must be between -180 and 180'),
+  body('weather_condition')
+    .optional()
+    .isString().withMessage('Weather condition must be a string')
+], startTrip);
+
+/**
+ * @route   POST /api/trips/:trip_id/datapoints
+ * @desc    Upload data points for a trip
+ * @access  Private
+ */
+router.post('/:trip_id/datapoints', [
+  body('datapoints')
+    .isArray({ min: 1 }).withMessage('datapoints must be a non-empty array'),
+  body('datapoints.*.timestamp')
+    .optional()
+    .isISO8601().withMessage('Timestamp must be a valid date'),
+  body('datapoints.*.latitude')
+    .optional()
+    .isFloat({ min: -90, max: 90 }).withMessage('Latitude must be between -90 and 90'),
+  body('datapoints.*.longitude')
+    .optional()
+    .isFloat({ min: -180, max: 180 }).withMessage('Longitude must be between -180 and 180'),
+  body('datapoints.*.speed')
+    .optional()
+    .isFloat({ min: 0 }).withMessage('Speed must be a positive number'),
+  body('datapoints.*.acceleration')
+    .optional()
+    .isFloat().withMessage('Acceleration must be a number')
+], uploadDataPoints);
+
+/**
+ * @route   POST /api/trips/:trip_id/stop
+ * @desc    Stop a trip and calculate score
+ * @access  Private
+ */
+router.post('/:trip_id/stop', [
+  body('end_latitude')
+    .optional()
+    .isFloat({ min: -90, max: 90 }).withMessage('Latitude must be between -90 and 90'),
+  body('end_longitude')
+    .optional()
+    .isFloat({ min: -180, max: 180 }).withMessage('Longitude must be between -180 and 180')
+], stopTrip);
+
+/**
+ * @route   GET /api/trips
+ * @desc    Get user trips (supports userId query param for parents)
+ * @access  Private
+ */
+// Note: This route is already defined above, but we'll add getUserTrips as alternative
+// The existing getTrips handles filtering, getUserTrips handles parent/teen viewing
 
 module.exports = router;
 

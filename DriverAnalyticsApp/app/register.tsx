@@ -27,6 +27,11 @@ export default function RegisterScreen() {
       return;
     }
 
+    if (password.length < 8) {
+      Alert.alert('Invalid password', 'Password must be at least 8 characters long.');
+      return;
+    }
+
     try {
       await register({
         name: name.trim(),
@@ -34,9 +39,12 @@ export default function RegisterScreen() {
         password,
         role,
       });
+      // Navigation will be handled by the home screen redirect logic
       router.replace('/(tabs)');
     } catch (error: any) {
-      Alert.alert('Registration failed', error.message ?? 'Please try again.');
+      console.error('Registration error in screen:', error);
+      const errorMessage = error?.message || error?.toString() || 'Registration failed. Please try again.';
+      Alert.alert('Registration failed', errorMessage);
     }
   };
 

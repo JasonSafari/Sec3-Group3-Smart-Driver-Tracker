@@ -1,28 +1,34 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
+import { useRouter } from 'expo-router';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/hooks/use-auth';
-
-type Trip = {
-  trip_id: number;
-  user_id: number;
-  start_time: string | null;
-  end_time: string | null;
-  distance_km: string | null;
-  avg_speed: string | null;
-};
+import { fetchTrips, searchTrips, exportTripsToCSV, type Trip, type TripFilters } from '@/utils/api';
 
 export default function TripsScreen() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const router = useRouter();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState<TripFilters>({});
 
-  const fetchTrips = async () => {
+  const loadTrips = async (search?: string) => {
     if (!token) {
       setError('Not authenticated');
       setLoading(false);
@@ -31,20 +37,15 @@ export default function TripsScreen() {
 
     try {
       setError(null);
-      const response = await fetch('http://localhost:3000/api/trips', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        const message = data?.error || data?.message || 'Failed to fetch trips';
-        throw new Error(message);
+      let data;
+      
+      if (search && search.trim()) {
+        data = await searchTrips(token, search, filters.startDate, filters.endDate);
+        setTrips(data.results ?? []);
+      } else {
+        data = await fetchTrips(token, filters);
+        setTrips(data.trips ?? []);
       }
-
-      setTrips(data.trips ?? []);
     } catch (err: any) {
       setError(err.message ?? 'Failed to fetch trips');
     } finally {
@@ -54,26 +55,60 @@ export default function TripsScreen() {
   };
 
   useEffect(() => {
-    fetchTrips();
+    loadTrips();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, filters]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchTrips();
+    loadTrips(searchQuery);
+  };
+
+  const handleSearch = () => {
+    if (searchQuery.trim()) {
+      loadTrips(searchQuery);
+    } else {
+      loadTrips();
+    }
+  };
+
+  const handleExport = async () => {
+    if (!token) return;
+    
+    try {
+      Alert.alert('Export', 'Exporting trips to CSV...');
+      const csv = await exportTripsToCSV(token, filters.startDate, filters.endDate);
+      
+      // In a real app, you'd use a file system library to save the file
+      // For now, we'll just show an alert
+      Alert.alert('Export Complete', `CSV data ready (${csv.length} characters)`);
+    } catch (err: any) {
+      Alert.alert('Export Failed', err.message);
+    }
   };
 
   const renderItem = ({ item }: { item: Trip }) => {
     const date = item.start_time ? new Date(item.start_time) : null;
+    const score = item.score?.overall_score;
+    
     return (
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle">
-          {date ? date.toLocaleString() : 'Unknown start time'}
-        </ThemedText>
-        <ThemedText>
-          Distance: {item.distance_km ?? '—'} km • Avg speed: {item.avg_speed ?? '—'} km/h
-        </ThemedText>
-      </ThemedView>
+      <Pressable
+        onPress={() => router.push(`/trip-details?id=${item.trip_id}`)}
+      >
+        <ThemedView style={styles.card}>
+          <ThemedText type="subtitle">
+            {date ? date.toLocaleString() : 'Unknown start time'}
+          </ThemedText>
+          <ThemedText>
+            Distance: {item.distance_km ?? '—'} km • Avg speed: {item.avg_speed ?? '—'} km/h
+          </ThemedText>
+          {score !== undefined && (
+            <ThemedText style={styles.score}>
+              Score: {score.toFixed(1)}/100
+            </ThemedText>
+          )}
+        </ThemedView>
+      </Pressable>
     );
   };
 
@@ -85,6 +120,42 @@ export default function TripsScreen() {
       <ThemedView style={styles.header}>
         <ThemedText type="title">My Trips</ThemedText>
         <ThemedText>Trips associated with your account.</ThemedText>
+        
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search trips..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={handleSearch}
+            placeholderTextColor="#9ca3af"
+          />
+          <Pressable style={styles.searchButton} onPress={handleSearch}>
+            <ThemedText>Search</ThemedText>
+          </Pressable>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.actions}>
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => setShowFilters(!showFilters)}
+          >
+            <ThemedText>Filters</ThemedText>
+          </Pressable>
+          <Pressable style={styles.actionButton} onPress={handleExport}>
+            <ThemedText>Export CSV</ThemedText>
+          </Pressable>
+          {user?.role === 'parent' && (
+            <Pressable
+              style={styles.actionButton}
+              onPress={() => router.push('/family-trips')}
+            >
+              <ThemedText>Family Trips</ThemedText>
+            </Pressable>
+          )}
+        </View>
       </ThemedView>
 
       {loading ? (
@@ -120,8 +191,40 @@ export default function TripsScreen() {
 
 const styles = StyleSheet.create({
   header: {
-    gap: 6,
+    gap: 12,
     marginBottom: 16,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  searchInput: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#374151',
+    backgroundColor: '#1f2937',
+    color: '#f9fafb',
+  },
+  searchButton: {
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#3b82f6',
+    justifyContent: 'center',
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  actionButton: {
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#374151',
+    minWidth: 80,
+    alignItems: 'center',
   },
   center: {
     marginTop: 40,
@@ -138,6 +241,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#1f2937',
+    marginBottom: 8,
+  },
+  score: {
+    marginTop: 4,
+    color: '#3b82f6',
+    fontWeight: '600',
   },
 });
 
