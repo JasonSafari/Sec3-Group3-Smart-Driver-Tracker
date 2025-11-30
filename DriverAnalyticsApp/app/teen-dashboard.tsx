@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -18,6 +19,7 @@ import { getUserTrips, type Trip } from '@/services/tripService';
 export default function TeenDashboard() {
   const { user, token, loading: authLoading } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [stats, setStats] = useState<any>(null);
   const [recentTrips, setRecentTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,11 +91,19 @@ export default function TeenDashboard() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* No header on dashboard - it's already home */}
-      <ThemedView style={styles.header}>
-        <ThemedText type="title">Welcome, {user?.name}</ThemedText>
-        <ThemedText>Your driving dashboard</ThemedText>
-      </ThemedView>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 16 }]}
+        showsVerticalScrollIndicator={true}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* Header with safe area padding */}
+        <ThemedView style={styles.header}>
+          <ThemedText type="title">Welcome, {user?.name}</ThemedText>
+          <ThemedText>Your driving dashboard</ThemedText>
+        </ThemedView>
 
       {/* Overall Score Card */}
       <ThemedView style={styles.scoreCard}>
@@ -151,15 +161,14 @@ export default function TeenDashboard() {
         {recentTrips.length === 0 ? (
           <ThemedText style={styles.emptyText}>No trips yet. Start your first trip!</ThemedText>
         ) : (
-          <FlatList
-            data={recentTrips}
-            keyExtractor={(t) => String(t.trip_id)}
-            renderItem={({ item }) => {
+          <View>
+            {recentTrips.map((item) => {
               const date = item.start_time ? new Date(item.start_time) : null;
               const score = item.score?.overall_score;
               const isValidScore = typeof score === 'number' && !isNaN(score);
               return (
                 <Pressable
+                  key={item.trip_id}
                   onPress={() => router.push(`/trip-details?id=${item.trip_id}`)}
                 >
                   <ThemedView style={styles.tripCard}>
@@ -179,13 +188,11 @@ export default function TeenDashboard() {
                   </ThemedView>
                 </Pressable>
               );
-            }}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-            }
-          />
+            })}
+          </View>
         )}
       </ThemedView>
+      </ScrollView>
     </ThemedView>
   );
 }
@@ -193,7 +200,13 @@ export default function TeenDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
     padding: 16,
+    paddingBottom: 32,
   },
   center: {
     flex: 1,
@@ -202,6 +215,7 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 24,
+    paddingTop: 8,
   },
   scoreCard: {
     paddingTop: 32,

@@ -271,17 +271,35 @@ const deleteTrip = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.userId;
+    const currentUser = await User.findByPk(userId);
 
+    // Find the trip
     const trip = await Trip.findOne({
-      where: {
-        trip_id: id,
-        user_id: userId
-      }
+      where: { trip_id: id },
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['user_id', 'family_id']
+      }]
     });
 
     if (!trip) {
       return res.status(404).json({
         error: 'Trip not found'
+      });
+    }
+
+    // Check if user owns the trip OR is a parent viewing a family member's trip
+    const isOwner = trip.user_id === userId;
+    const isParentViewingFamilyTrip = 
+      currentUser.role === 'parent' && 
+      trip.user?.family_id && 
+      trip.user.family_id === currentUser.family_id;
+
+    if (!isOwner && !isParentViewingFamilyTrip) {
+      return res.status(403).json({
+        error: 'Access denied',
+        message: 'You can only delete your own trips or trips from your family members'
       });
     }
 
@@ -728,7 +746,7 @@ const stopTrip = async (req, res) => {
     }
 
     // Get all data points for this trip
-    const datapoints = await DataPoint.findAll({
+    let datapoints = await DataPoint.findAll({
       where: { trip_id },
       order: [['timestamp', 'ASC']]
     });
@@ -740,25 +758,7 @@ const stopTrip = async (req, res) => {
       });
     }
 
-    // Calculate distance using first and last datapoint
-    const { calculateDistance } = require('../utils/distanceCalculator');
-    let distance_km = 0;
-    
-    if (datapoints.length > 1) {
-      const first = datapoints[0];
-      const last = datapoints[datapoints.length - 1];
-      
-      if (first.latitude && first.longitude && last.latitude && last.longitude) {
-        distance_km = calculateDistance(
-          parseFloat(first.latitude),
-          parseFloat(first.longitude),
-          parseFloat(last.latitude),
-          parseFloat(last.longitude)
-        );
-      }
-    }
-
-    // Add end datapoint if coordinates provided
+    // Add end datapoint if coordinates provided (before calculating distance)
     if (end_latitude && end_longitude) {
       await DataPoint.create({
         trip_id: parseInt(trip_id),
@@ -768,6 +768,21 @@ const stopTrip = async (req, res) => {
         speed: 0,
         acceleration: 0
       });
+      
+      // Reload datapoints to include the end point
+      datapoints = await DataPoint.findAll({
+        where: { trip_id },
+        order: [['timestamp', 'ASC']]
+      });
+    }
+
+    // Calculate cumulative distance from all GPS points
+    // This gives actual distance traveled, not just straight-line distance
+    const { calculateCumulativeDistance } = require('../utils/distanceCalculator');
+    let distance_km = 0;
+    
+    if (datapoints.length > 1) {
+      distance_km = calculateCumulativeDistance(datapoints);
     }
 
     // Calculate average speed

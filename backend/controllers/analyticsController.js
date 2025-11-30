@@ -230,6 +230,13 @@ const getUserStatistics = async (req, res) => {
     const currentUserId = req.user.userId;
     const currentUser = await User.findByPk(currentUserId);
 
+    if (!currentUser) {
+      return res.status(404).json({
+        error: 'User not found',
+        message: 'Current user not found in database'
+      });
+    }
+
     // Determine target user
     let targetUserId = currentUserId;
     
@@ -253,6 +260,13 @@ const getUserStatistics = async (req, res) => {
       targetUserId = parseInt(queryUserId);
     }
 
+    if (!targetUserId || isNaN(targetUserId)) {
+      return res.status(400).json({
+        error: 'Invalid user ID',
+        message: 'User ID must be a valid number'
+      });
+    }
+
     const stats = await getUserStats(targetUserId);
 
     res.status(200).json({
@@ -261,9 +275,11 @@ const getUserStatistics = async (req, res) => {
     });
   } catch (error) {
     console.error('Get user statistics error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       error: 'Failed to retrieve user statistics',
-      message: error.message
+      message: error.message || 'Unknown error occurred',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };

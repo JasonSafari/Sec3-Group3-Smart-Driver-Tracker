@@ -29,6 +29,9 @@ export default function LiveTripScreen() {
   const [currentSpeed, setCurrentSpeed] = useState(0);
   const [dataPoints, setDataPoints] = useState<DataPoint[]>([]);
   const [lastLocation, setLastLocation] = useState<Location.LocationObject | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0); // For timer updates
+  const [lastLocationUpdate, setLastLocationUpdate] = useState<Date | null>(null); // Track last GPS update
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null); // GPS accuracy in meters
   
   // Use refs to track subscriptions (better for cleanup)
   const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
@@ -143,14 +146,47 @@ export default function LiveTripScreen() {
     };
   }, [router]);
 
-  // Removed - now handled in useEffect
+  // Timer update effect - updates every second to refresh the timer display
+  useEffect(() => {
+    if (!startTime) {
+      setElapsedSeconds(0);
+      return;
+    }
+
+    // Update immediately
+    const updateTimer = () => {
+      const seconds = Math.floor((new Date().getTime() - startTime.getTime()) / 1000);
+      setElapsedSeconds(seconds);
+    };
+
+    // Update immediately on mount
+    updateTimer();
+
+    // Then update every second
+    const interval = setInterval(updateTimer, 1000);
+
+    return () => clearInterval(interval);
+  }, [startTime]);
 
   const handleLocationUpdate = (newLocation: Location.LocationObject) => {
     setLocation(newLocation);
+    setLastLocationUpdate(new Date()); // Track when GPS last updated
+    setGpsAccuracy(newLocation.coords.accuracy || null); // Track GPS accuracy
     
     // Calculate speed (convert m/s to km/h)
+    // Filter out negative speeds and very small speeds (< 1 km/h) to handle GPS drift
     if (newLocation.coords.speed !== null && newLocation.coords.speed !== undefined) {
-      setCurrentSpeed(newLocation.coords.speed * 3.6); // m/s to km/h
+      const speedKmh = newLocation.coords.speed * 3.6; // m/s to km/h
+      // Only set speed if it's positive and >= 1 km/h (filter GPS drift)
+      if (speedKmh >= 1) {
+        setCurrentSpeed(speedKmh);
+      } else {
+        // If speed is negative or very small (< 1 km/h), treat as stationary
+        setCurrentSpeed(0);
+      }
+    } else {
+      // If GPS doesn't provide speed, set to 0
+      setCurrentSpeed(0);
     }
 
     // Calculate distance
@@ -198,9 +234,9 @@ export default function LiveTripScreen() {
 
   const getDuration = () => {
     if (!startTime) return '0:00';
-    const seconds = Math.floor((new Date().getTime() - startTime.getTime()) / 1000);
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    // Use elapsedSeconds state to trigger re-renders
+    const mins = Math.floor(elapsedSeconds / 60);
+    const secs = elapsedSeconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
@@ -307,17 +343,43 @@ export default function LiveTripScreen() {
         </ThemedView>
       </ThemedView>
 
-      {/* Location Info */}
-      {location && (
-        <ThemedView style={styles.locationCard}>
-          <ThemedText style={styles.locationText}>
-            Lat: {location.coords.latitude.toFixed(6)}
-          </ThemedText>
-          <ThemedText style={styles.locationText}>
-            Lng: {location.coords.longitude.toFixed(6)}
-          </ThemedText>
-        </ThemedView>
-      )}
+      {/* GPS Status & Location Info */}
+      <ThemedView style={styles.locationCard}>
+        {location ? (
+          <>
+            {/* GPS Status Indicator */}
+            <ThemedView style={styles.gpsStatusRow}>
+              <ThemedView style={[styles.gpsIndicator, styles.gpsActive]} />
+              <ThemedText style={styles.gpsStatusText}>GPS Active</ThemedText>
+              {gpsAccuracy !== null && (
+                <ThemedText style={styles.gpsAccuracyText}>
+                  Accuracy: {gpsAccuracy.toFixed(0)}m
+                </ThemedText>
+              )}
+            </ThemedView>
+            
+            {/* Location Coordinates */}
+            <ThemedText style={styles.locationText}>
+              Lat: {location.coords.latitude.toFixed(6)}
+            </ThemedText>
+            <ThemedText style={styles.locationText}>
+              Lng: {location.coords.longitude.toFixed(6)}
+            </ThemedText>
+            
+            {/* Last Update Time */}
+            {lastLocationUpdate && (
+              <ThemedText style={styles.lastUpdateText}>
+                Last update: {lastLocationUpdate.toLocaleTimeString()}
+              </ThemedText>
+            )}
+          </>
+        ) : (
+          <ThemedView style={styles.gpsStatusRow}>
+            <ThemedView style={[styles.gpsIndicator, styles.gpsInactive]} />
+            <ThemedText style={styles.gpsStatusText}>Waiting for GPS...</ThemedText>
+          </ThemedView>
+        )}
+      </ThemedView>
 
       {/* Stop Button */}
       <Pressable
@@ -382,11 +444,44 @@ const styles = StyleSheet.create({
     backgroundColor: '#1f2937',
     marginBottom: 24,
   },
+  gpsStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  gpsIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  gpsActive: {
+    backgroundColor: '#22c55e',
+  },
+  gpsInactive: {
+    backgroundColor: '#ef4444',
+  },
+  gpsStatusText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#e5e5e5',
+  },
+  gpsAccuracyText: {
+    fontSize: 12,
+    color: '#9ca3af',
+    marginLeft: 'auto',
+  },
   locationText: {
     fontSize: 12,
     color: '#9ca3af',
     fontFamily: 'monospace',
     marginBottom: 4,
+  },
+  lastUpdateText: {
+    fontSize: 11,
+    color: '#6b7280',
+    fontStyle: 'italic',
+    marginTop: 4,
   },
   stopButton: {
     padding: 20,

@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 
 import { ThemedText } from '@/components/themed-text';
@@ -21,12 +22,13 @@ import {
   type FamilyMember,
 } from '@/services/familyService';
 import { getUserStats } from '@/services/analyticsService';
-import { getUserTrips, type Trip } from '@/services/tripService';
+import { getUserTrips, deleteTrip, type Trip } from '@/services/tripService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ParentDashboard() {
   const { user, token, loading: authLoading, setUser } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [selectedTeenId, setSelectedTeenId] = useState<number | null>(null);
   const [teenStats, setTeenStats] = useState<any>(null);
@@ -188,6 +190,31 @@ export default function ParentDashboard() {
     }
   };
 
+  const handleDeleteTrip = async (tripId: number, teenName: string) => {
+    Alert.alert(
+      'Delete Trip',
+      `Are you sure you want to delete ${teenName}'s trip? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteTrip(tripId);
+              // Reload data after deletion
+              if (selectedTeenId) {
+                loadTeenData(selectedTeenId);
+              }
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to delete trip');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const getScoreColor = (score: number) => {
     if (score >= 85) return '#22c55e';
     if (score >= 70) return '#f59e0b';
@@ -217,11 +244,19 @@ export default function ParentDashboard() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* No header on dashboard - it's already home */}
-      <ThemedView style={styles.header}>
-        <ThemedText type="title">Parent Dashboard</ThemedText>
-        <ThemedText>Monitor your teen's driving</ThemedText>
-      </ThemedView>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 16 }]}
+        showsVerticalScrollIndicator={true}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* Header with safe area padding */}
+        <ThemedView style={styles.header}>
+          <ThemedText type="title">Parent Dashboard</ThemedText>
+          <ThemedText>Monitor your teen's driving</ThemedText>
+        </ThemedView>
 
       {/* Teen Selector */}
       {familyMembers.length > 0 ? (
@@ -310,39 +345,44 @@ export default function ParentDashboard() {
             {recentTrips.length === 0 ? (
               <ThemedText style={styles.emptyText}>No trips yet</ThemedText>
             ) : (
-              <FlatList
-                data={recentTrips}
-                keyExtractor={(t) => String(t.trip_id)}
-                renderItem={({ item }) => {
+              <View>
+                {recentTrips.map((item) => {
                   const date = item.start_time ? new Date(item.start_time) : null;
                   const score = item.score?.overall_score;
                   const isValidScore = typeof score === 'number' && !isNaN(score);
+                  const teenName = selectedTeen?.name || 'Teen';
                   return (
-                    <Pressable
-                      onPress={() => router.push(`/trip-details?id=${item.trip_id}`)}
-                    >
-                      <ThemedView style={styles.tripCard}>
-                        <ThemedText>
-                          {date ? date.toLocaleDateString() : 'Unknown date'}
-                        </ThemedText>
-                        <ThemedText>
-                          {item.distance_km || '—'} km • {item.avg_speed || '—'} km/h
-                        </ThemedText>
-                        {isValidScore && (
-                          <ThemedText
-                            style={[styles.tripScore, { color: getScoreColor(score) }]}
-                          >
-                            Score: {score.toFixed(1)}/100
+                    <ThemedView key={item.trip_id} style={styles.tripCardContainer}>
+                      <Pressable
+                        style={styles.tripCardContent}
+                        onPress={() => router.push(`/trip-details?id=${item.trip_id}`)}
+                      >
+                        <View style={styles.tripCardInfo}>
+                          <ThemedText>
+                            {date ? date.toLocaleDateString() : 'Unknown date'}
                           </ThemedText>
-                        )}
-                      </ThemedView>
-                    </Pressable>
+                          <ThemedText>
+                            {item.distance_km || '—'} km • {item.avg_speed || '—'} km/h
+                          </ThemedText>
+                          {isValidScore && (
+                            <ThemedText
+                              style={[styles.tripScore, { color: getScoreColor(score) }]}
+                            >
+                              Score: {score.toFixed(1)}/100
+                            </ThemedText>
+                          )}
+                        </View>
+                      </Pressable>
+                      <Pressable
+                        style={styles.deleteTripButton}
+                        onPress={() => handleDeleteTrip(item.trip_id, teenName)}
+                      >
+                        <ThemedText style={styles.deleteTripButtonText}>Delete</ThemedText>
+                      </Pressable>
+                    </ThemedView>
                   );
-                }}
-                refreshControl={
-                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                }
-              />
+                })}
+              </View>
             )}
           </ThemedView>
         </>
@@ -377,6 +417,7 @@ export default function ParentDashboard() {
           <ThemedText style={styles.actionButtonText}>Profile & Logout</ThemedText>
         </Pressable>
       </View>
+      </ScrollView>
     </ThemedView>
   );
 }
@@ -384,7 +425,13 @@ export default function ParentDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
     padding: 16,
+    paddingBottom: 32,
   },
   center: {
     flex: 1,
@@ -393,6 +440,7 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 24,
+    paddingTop: 8,
   },
   selectorCard: {
     padding: 16,
@@ -464,9 +512,11 @@ const styles = StyleSheet.create({
   },
   statsCard: {
     padding: 20,
+    paddingTop: 24,
     borderRadius: 12,
     backgroundColor: '#1f2937',
     marginBottom: 16,
+    overflow: 'visible',
   },
   scoreRow: {
     flexDirection: 'row',
@@ -483,21 +533,28 @@ const styles = StyleSheet.create({
   },
   scoreValue: {
     fontSize: 32,
+    lineHeight: 40,
     fontWeight: '700',
+    overflow: 'visible',
   },
   statsRow: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 12,
     marginTop: 16,
+    justifyContent: 'space-between',
   },
   statItem: {
     flex: 1,
     alignItems: 'center',
+    minWidth: 0, // Prevent overflow
+    paddingHorizontal: 4,
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
     marginBottom: 4,
+    textAlign: 'center',
+    flexWrap: 'wrap',
   },
   statLabel: {
     fontSize: 12,
@@ -510,6 +567,20 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     marginTop: 8,
   },
+  tripCardContainer: {
+    flexDirection: 'row',
+    borderRadius: 8,
+    backgroundColor: '#1f2937',
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  tripCardContent: {
+    flex: 1,
+    padding: 12,
+  },
+  tripCardInfo: {
+    flex: 1,
+  },
   tripCard: {
     padding: 12,
     borderRadius: 8,
@@ -518,6 +589,17 @@ const styles = StyleSheet.create({
   },
   tripScore: {
     marginTop: 4,
+    fontWeight: '600',
+  },
+  deleteTripButton: {
+    backgroundColor: '#ef4444',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  deleteTripButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
     fontWeight: '600',
   },
   actions: {

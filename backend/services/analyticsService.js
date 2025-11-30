@@ -10,9 +10,13 @@ const { Op } = require('sequelize');
  * @returns {Promise<Object>} User statistics
  */
 async function getUserStats(userId) {
+  if (!userId || isNaN(userId)) {
+    throw new Error('Invalid user ID provided');
+  }
+
   // Get all trips for user
   const trips = await Trip.findAll({
-    where: { user_id: userId },
+    where: { user_id: parseInt(userId) },
     include: [{
       model: Score,
       as: 'score',
@@ -41,9 +45,10 @@ async function getUserStats(userId) {
   let totalScore = 0;
   let scoreCount = 0;
   let bestScore = 0;
-  let worstScore = 100;
+  let worstScore = 0;
   let totalSpeedingEvents = 0;
   let totalHarshBrakes = 0;
+  let hasScores = false;
 
   trips.forEach(trip => {
     if (trip.distance_km) {
@@ -53,8 +58,14 @@ async function getUserStats(userId) {
       const overallScore = parseFloat(trip.score.overall_score || 0);
       totalScore += overallScore;
       scoreCount++;
-      if (overallScore > bestScore) bestScore = overallScore;
-      if (overallScore < worstScore) worstScore = overallScore;
+      if (!hasScores) {
+        bestScore = overallScore;
+        worstScore = overallScore;
+        hasScores = true;
+      } else {
+        if (overallScore > bestScore) bestScore = overallScore;
+        if (overallScore < worstScore) worstScore = overallScore;
+      }
     }
   });
 
@@ -104,20 +115,23 @@ async function getUserStats(userId) {
     const last5 = trips.slice(0, 5);
     const previous5 = trips.slice(5, 10);
     
-    const last5Avg = last5
-      .filter(t => t.score)
-      .reduce((sum, t) => sum + parseFloat(t.score.overall_score || 0), 0) / 
-      last5.filter(t => t.score).length;
+    const last5WithScores = last5.filter(t => t.score);
+    const previous5WithScores = previous5.filter(t => t.score);
     
-    const previous5Avg = previous5
-      .filter(t => t.score)
-      .reduce((sum, t) => sum + parseFloat(t.score.overall_score || 0), 0) / 
-      previous5.filter(t => t.score).length;
+    if (last5WithScores.length > 0 && previous5WithScores.length > 0) {
+      const last5Avg = last5WithScores
+        .reduce((sum, t) => sum + parseFloat(t.score.overall_score || 0), 0) / 
+        last5WithScores.length;
+      
+      const previous5Avg = previous5WithScores
+        .reduce((sum, t) => sum + parseFloat(t.score.overall_score || 0), 0) / 
+        previous5WithScores.length;
 
-    recentTrend = {
-      direction: last5Avg > previous5Avg ? 'improving' : last5Avg < previous5Avg ? 'declining' : 'stable',
-      change: parseFloat((last5Avg - previous5Avg).toFixed(2))
-    };
+      recentTrend = {
+        direction: last5Avg > previous5Avg ? 'improving' : last5Avg < previous5Avg ? 'declining' : 'stable',
+        change: parseFloat((last5Avg - previous5Avg).toFixed(2))
+      };
+    }
   }
 
   return {

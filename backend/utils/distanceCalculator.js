@@ -42,7 +42,47 @@ function toRadians(degrees) {
   return degrees * (Math.PI / 180);
 }
 
+/**
+ * Calculate cumulative distance from all GPS points in a trip
+ * This gives the actual distance traveled, not just straight-line distance
+ * @param {Array} datapoints - Array of datapoint objects with latitude and longitude
+ * @returns {number} Total distance in kilometers
+ */
+function calculateCumulativeDistance(datapoints) {
+  if (!datapoints || datapoints.length < 2) {
+    return 0;
+  }
+
+  let totalDistance = 0;
+
+  // Calculate distance between consecutive points
+  for (let i = 1; i < datapoints.length; i++) {
+    const prev = datapoints[i - 1];
+    const curr = datapoints[i];
+
+    // Skip if coordinates are missing
+    if (
+      !prev.latitude || !prev.longitude ||
+      !curr.latitude || !curr.longitude
+    ) {
+      continue;
+    }
+
+    const segmentDistance = calculateDistance(
+      parseFloat(prev.latitude),
+      parseFloat(prev.longitude),
+      parseFloat(curr.latitude),
+      parseFloat(curr.longitude)
+    );
+
+    totalDistance += segmentDistance;
+  }
+
+  return parseFloat(totalDistance.toFixed(2));
+}
+
 module.exports = {
-  calculateDistance
+  calculateDistance,
+  calculateCumulativeDistance
 };
 
