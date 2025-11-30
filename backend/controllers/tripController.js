@@ -4,18 +4,13 @@ const Trip = require('../models/Trip');
 const User = require('../models/User');
 const Score = require('../models/Score');
 const DataPoint = require('../models/DataPoint');
-// Associations are set up in models/associations.js
 
-/**
- * Get all trips for the authenticated user with filtering
- * GET /api/trips?startDate=2024-01-01&endDate=2024-12-31&minDistance=10&maxDistance=100&minScore=80
- */
 const getTrips = async (req, res) => {
   try {
     const currentUserId = req.user.userId;
     const currentUser = await User.findByPk(currentUserId);
     const {
-      userId: queryUserId, // For parents viewing teen trips
+      userId: queryUserId,
       startDate,
       endDate,
       minDistance,
@@ -66,7 +61,6 @@ const getTrips = async (req, res) => {
       }
     }
 
-    // Distance filtering
     if (minDistance || maxDistance) {
       whereClause.distance_km = {};
       if (minDistance) {
@@ -270,12 +264,28 @@ const updateTrip = async (req, res) => {
 const deleteTrip = async (req, res) => {
   try {
     const { id } = req.params;
+    const tripId = parseInt(id);
+    
+    if (isNaN(tripId)) {
+      return res.status(400).json({
+        error: 'Invalid trip ID',
+        message: 'Trip ID must be a valid number'
+      });
+    }
+
     const userId = req.user.userId;
     const currentUser = await User.findByPk(userId);
 
+    if (!currentUser) {
+      return res.status(401).json({
+        error: 'User not found',
+        message: 'Authentication error'
+      });
+    }
+
     // Find the trip
     const trip = await Trip.findOne({
-      where: { trip_id: id },
+      where: { trip_id: tripId },
       include: [{
         model: User,
         as: 'user',
@@ -285,11 +295,11 @@ const deleteTrip = async (req, res) => {
 
     if (!trip) {
       return res.status(404).json({
-        error: 'Trip not found'
+        error: 'Trip not found',
+        message: 'The specified trip does not exist'
       });
     }
 
-    // Check if user owns the trip OR is a parent viewing a family member's trip
     const isOwner = trip.user_id === userId;
     const isParentViewingFamilyTrip = 
       currentUser.role === 'parent' && 
@@ -303,6 +313,11 @@ const deleteTrip = async (req, res) => {
       });
     }
 
+    await DataPoint.destroy({
+      where: { trip_id: tripId }
+    });
+
+    // Delete the trip
     await trip.destroy();
 
     res.status(200).json({
@@ -310,9 +325,10 @@ const deleteTrip = async (req, res) => {
     });
   } catch (error) {
     console.error('Delete trip error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       error: 'Failed to delete trip',
-      message: error.message
+      message: error.message || 'An unexpected error occurred while deleting the trip'
     });
   }
 };

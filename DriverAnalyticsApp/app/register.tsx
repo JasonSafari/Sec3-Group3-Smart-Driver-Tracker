@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   StyleSheet,
   Text,
   TextInput,
@@ -11,6 +10,8 @@ import {
 import { Link, useRouter } from 'expo-router';
 
 import { useAuth } from '@/hooks/use-auth';
+import { Toast } from '@/components/toast';
+import { getUserFriendlyError, getSuccessMessage } from '@/utils/errorMessages';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -20,15 +21,41 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'parent' | 'teen'>('parent');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+  const [showToast, setShowToast] = useState(false);
+  const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({});
 
-  const handleSubmit = async () => {
-    if (!name || !email || !password) {
-      Alert.alert('Missing information', 'Please fill in all fields.');
-      return;
+  const showToastMessage = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'error') => {
+    setToast({ message, type });
+    setShowToast(true);
+  };
+
+  const validateForm = (): boolean => {
+    const newErrors: { name?: string; email?: string; password?: string } = {};
+
+    if (!name.trim()) {
+      newErrors.name = 'Name is required';
     }
 
-    if (password.length < 8) {
-      Alert.alert('Invalid password', 'Password must be at least 8 characters long.');
+    if (!email.trim()) {
+      newErrors.email = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      newErrors.email = 'Please enter a valid email address';
+    }
+
+    if (!password) {
+      newErrors.password = 'Password is required';
+    } else if (password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters long';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) {
+      showToastMessage('Please fill in all fields correctly', 'error');
       return;
     }
 
@@ -39,17 +66,25 @@ export default function RegisterScreen() {
         password,
         role,
       });
-      // Navigation will be handled by the home screen redirect logic
-      router.replace('/(tabs)');
+      showToastMessage(getSuccessMessage('register'), 'success');
+      setTimeout(() => {
+        router.replace('/(tabs)');
+      }, 500);
     } catch (error: any) {
-      console.error('Registration error in screen:', error);
-      const errorMessage = error?.message || error?.toString() || 'Registration failed. Please try again.';
-      Alert.alert('Registration failed', errorMessage);
+      const friendlyError = getUserFriendlyError(error);
+      showToastMessage(friendlyError, 'error');
     }
   };
 
   return (
     <View style={styles.container}>
+      <Toast
+        message={toast?.message || ''}
+        type={toast?.type || 'error'}
+        visible={showToast}
+        onHide={() => setShowToast(false)}
+      />
+      
       <Text style={styles.title}>Create account</Text>
       <Text style={styles.subtitle}>Join Driver Analytics</Text>
 
@@ -57,29 +92,50 @@ export default function RegisterScreen() {
         <Text style={styles.label}>Full name</Text>
         <TextInput
           value={name}
-          onChangeText={setName}
+          onChangeText={(text) => {
+            setName(text);
+            setErrors({ ...errors, name: undefined });
+          }}
           placeholder="John Doe"
-          style={styles.input}
+          placeholderTextColor="#6b7280"
+          style={[styles.input, errors.name && styles.inputError]}
         />
+        {errors.name ? (
+          <Text style={styles.errorText}>{errors.name}</Text>
+        ) : null}
 
         <Text style={styles.label}>Email</Text>
         <TextInput
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(text) => {
+            setEmail(text);
+            setErrors({ ...errors, email: undefined });
+          }}
           autoCapitalize="none"
           keyboardType="email-address"
           placeholder="you@example.com"
-          style={styles.input}
+          placeholderTextColor="#6b7280"
+          style={[styles.input, errors.email && styles.inputError]}
         />
+        {errors.email ? (
+          <Text style={styles.errorText}>{errors.email}</Text>
+        ) : null}
 
         <Text style={styles.label}>Password</Text>
         <TextInput
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(text) => {
+            setPassword(text);
+            setErrors({ ...errors, password: undefined });
+          }}
           secureTextEntry
           placeholder="••••••••"
-          style={styles.input}
+          placeholderTextColor="#6b7280"
+          style={[styles.input, errors.password && styles.inputError]}
         />
+        {errors.password ? (
+          <Text style={styles.errorText}>{errors.password}</Text>
+        ) : null}
 
         <Text style={styles.label}>Role</Text>
         <View style={styles.roleRow}>
@@ -175,7 +231,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#f9fafb',
     backgroundColor: '#020617',
-    marginBottom: 12,
+    marginBottom: 4,
+  },
+  inputError: {
+    borderColor: '#ef4444',
+    borderWidth: 2,
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 12,
+    marginBottom: 8,
+    marginLeft: 4,
   },
   roleRow: {
     flexDirection: 'row',

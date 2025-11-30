@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -15,6 +14,9 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/hooks/use-auth';
 import { fetchTrips, searchTrips, exportTripsToCSV, type Trip, type TripFilters } from '@/utils/api';
+import { EmptyState } from '@/components/empty-state';
+import { Toast } from '@/components/toast';
+import { getUserFriendlyError, getSuccessMessage } from '@/utils/errorMessages';
 
 export default function TripsScreen() {
   const { token, user } = useAuth();
@@ -26,6 +28,8 @@ export default function TripsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<TripFilters>({});
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+  const [showToast, setShowToast] = useState(false);
 
   const loadTrips = async (search?: string) => {
     if (!token) {
@@ -46,11 +50,18 @@ export default function TripsScreen() {
         setTrips(data.trips ?? []);
       }
     } catch (err: any) {
-      setError(err.message ?? 'Failed to fetch trips');
+      const friendlyError = getUserFriendlyError(err);
+      setError(friendlyError);
+      showToastMessage(friendlyError, 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  const showToastMessage = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'error') => {
+    setToast({ message, type });
+    setShowToast(true);
   };
 
   useEffect(() => {
@@ -72,17 +83,21 @@ export default function TripsScreen() {
   };
 
   const handleExport = async () => {
-    if (!token) return;
+    if (!token) {
+      showToastMessage('Please log in to export trips', 'error');
+      return;
+    }
     
     try {
-      Alert.alert('Export', 'Exporting trips to CSV...');
+      showToastMessage('Exporting trips to CSV...', 'info');
       const csv = await exportTripsToCSV(token, filters.startDate, filters.endDate);
       
       // In a real app, you'd use a file system library to save the file
-      // For now, we'll just show an alert
-      Alert.alert('Export Complete', `CSV data ready (${csv.length} characters)`);
+      // For now, we'll just show a success message
+      showToastMessage(`Export complete! CSV data ready (${csv.length} characters)`, 'success');
     } catch (err: any) {
-      Alert.alert('Export Failed', err.message);
+      const friendlyError = getUserFriendlyError(err);
+      showToastMessage(friendlyError, 'error');
     }
   };
 
@@ -177,12 +192,17 @@ export default function TripsScreen() {
     
     if (trips.length === 0) {
       return (
-        <ThemedView style={styles.center}>
-          <ThemedText type="subtitle">No trips yet</ThemedText>
-          <ThemedText>
-            Once you start recording trips from the backend or app, they will appear here.
-          </ThemedText>
-        </ThemedView>
+        <EmptyState
+          icon="🚗"
+          title="No trips yet"
+          message={
+            searchQuery.trim()
+              ? `No trips found matching "${searchQuery}". Try a different search term.`
+              : "You haven't recorded any trips yet. Start your first trip from the dashboard!"
+          }
+          actionLabel={searchQuery.trim() ? undefined : "Go to Dashboard"}
+          onAction={searchQuery.trim() ? undefined : () => router.push('/(tabs)/dashboard')}
+        />
       );
     }
     
@@ -191,6 +211,12 @@ export default function TripsScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <Toast
+        message={toast?.message || ''}
+        type={toast?.type || 'error'}
+        visible={showToast}
+        onHide={() => setShowToast(false)}
+      />
       <FlatList
         data={trips}
         keyExtractor={(t) => String(t.trip_id)}

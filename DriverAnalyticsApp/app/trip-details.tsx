@@ -11,12 +11,18 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/hooks/use-auth';
 import { fetchRouteAnalysis, fetchRouteHeatMap, type RouteAnalysis } from '@/utils/api';
+import { getTripDataPoints, type DataPoint } from '@/services/tripService';
+import { TripMap } from '@/components/trip-map';
+import { SpeedChart } from '@/components/speed-chart';
+import { EmptyState } from '@/components/empty-state';
+import { getUserFriendlyError } from '@/utils/errorMessages';
 
 export default function TripDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { token } = useAuth();
   const [analysis, setAnalysis] = useState<RouteAnalysis | null>(null);
   const [heatMap, setHeatMap] = useState<any>(null);
+  const [dataPoints, setDataPoints] = useState<DataPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,12 +32,14 @@ export default function TripDetailsScreen() {
     const loadData = async () => {
       try {
         setError(null);
-        const [analysisData, heatMapData] = await Promise.all([
+        const [analysisData, heatMapData, dataPointsData] = await Promise.all([
           fetchRouteAnalysis(token, parseInt(id)),
           fetchRouteHeatMap(token, parseInt(id)),
+          getTripDataPoints(parseInt(id)).catch(() => ({ dataPoints: [] })), // Don't fail if datapoints fail
         ]);
         setAnalysis(analysisData.analysis);
         setHeatMap(heatMapData);
+        setDataPoints(dataPointsData.dataPoints || []);
       } catch (err: any) {
         setError(err.message ?? 'Failed to load trip details');
       } finally {
@@ -56,8 +64,13 @@ export default function TripDetailsScreen() {
     return (
       <ThemedView style={styles.container}>
         <View style={styles.center}>
-          <ThemedText type="subtitle">Error</ThemedText>
-          <ThemedText>{error}</ThemedText>
+          <EmptyState
+            icon="⚠️"
+            title="Error Loading Trip"
+            message={getUserFriendlyError({ message: error })}
+            actionLabel="Go Back"
+            onAction={() => router.back()}
+          />
         </View>
       </ThemedView>
     );
@@ -67,6 +80,30 @@ export default function TripDetailsScreen() {
     <ScrollView style={styles.container}>
       <ThemedView style={styles.content}>
         <ThemedText type="title">Trip Analysis</ThemedText>
+
+        {/* Trip Route Map */}
+        {dataPoints.length > 0 && (
+          <ThemedView style={styles.section}>
+            <ThemedText type="subtitle" style={styles.sectionTitle}>
+              Trip Route
+            </ThemedText>
+            <TripMap dataPoints={dataPoints} height={300} />
+          </ThemedView>
+        )}
+
+        {/* Speed Chart */}
+        {dataPoints.length > 0 && (
+          <ThemedView style={styles.section}>
+            <SpeedChart
+              data={dataPoints.map((dp) => ({
+                timestamp: dp.timestamp || new Date().toISOString(),
+                speed: dp.speed || 0,
+                acceleration: dp.acceleration,
+              }))}
+              height={250}
+            />
+          </ThemedView>
+        )}
 
         {analysis && (
           <>
@@ -204,6 +241,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#1f2937',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    marginBottom: 12,
   },
   statRow: {
     flexDirection: 'row',

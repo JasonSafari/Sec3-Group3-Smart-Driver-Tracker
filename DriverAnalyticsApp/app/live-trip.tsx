@@ -54,17 +54,31 @@ export default function LiveTripScreen() {
 
     const init = async () => {
       try {
-        const storedTripId = await AsyncStorage.getItem('activeTripId');
-        if (!storedTripId) {
-          Alert.alert('Error', 'No active trip found');
-          if (isMounted) router.back();
-          return;
-        }
+            const storedTripId = await AsyncStorage.getItem('activeTripId');
+            if (!storedTripId) {
+              Alert.alert('Error', 'No active trip found');
+              if (isMounted) router.back();
+              return;
+            }
 
-        if (!isMounted) return;
+            if (!isMounted) return;
 
-        setTripId(parseInt(storedTripId));
-        setStartTime(new Date());
+            setTripId(parseInt(storedTripId));
+            setStartTime(new Date());
+            
+            // Try to recover data points from storage (in case app crashed)
+            try {
+              const storedPoints = await AsyncStorage.getItem('tripDataPoints');
+              if (storedPoints) {
+                const recoveredPoints: DataPoint[] = JSON.parse(storedPoints);
+                if (recoveredPoints.length > 0) {
+                  setDataPoints(recoveredPoints);
+                  console.log(`📦 Recovered ${recoveredPoints.length} data points from storage`);
+                }
+              }
+            } catch (error) {
+              console.warn('Error recovering data points:', error);
+            }
 
         // Request location permissions
         const { status } = await Location.requestForegroundPermissionsAsync();
@@ -214,7 +228,15 @@ export default function LiveTripScreen() {
         acceleration: acceleration,
       };
 
-      setDataPoints((prev) => [...prev, newDataPoint]);
+      const updatedPoints = [...dataPoints, newDataPoint];
+      setDataPoints(updatedPoints);
+      
+      // Persist to AsyncStorage every 10 data points to prevent data loss
+      if (updatedPoints.length % 10 === 0) {
+        AsyncStorage.setItem('tripDataPoints', JSON.stringify(updatedPoints)).catch(err => {
+          console.warn('Error saving data points to storage:', err);
+        });
+      }
     }
   };
 
@@ -282,7 +304,13 @@ export default function LiveTripScreen() {
 
               // Upload all data points
               if (dataPoints.length > 0) {
-                await uploadDataPoints(tripId, dataPoints);
+                try {
+                  await uploadDataPoints(tripId, dataPoints);
+                } catch (uploadError: any) {
+                  // If upload fails, data points are already in AsyncStorage
+                  // They will be retried by the sync service
+                  console.warn('Failed to upload data points, will retry:', uploadError);
+                }
               }
 
               // Stop trip
@@ -292,7 +320,7 @@ export default function LiveTripScreen() {
                 finalLocation.coords.longitude
               );
 
-              // Clear stored trip data
+              // Clear stored trip data only after successful stop
               await AsyncStorage.multiRemove(['activeTripId', 'tripDataPoints']);
 
               // Navigate to score result

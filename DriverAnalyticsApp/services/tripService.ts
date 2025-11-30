@@ -163,7 +163,30 @@ export async function getTripDetails(tripId: number): Promise<{
     speed_score: number;
     brake_score: number;
   };
+  datapoints?: DataPoint[];
 }> {
   return apiRequest(`/trips/${tripId}`);
+}
+
+/**
+ * Get data points for a trip
+ */
+export async function getTripDataPoints(tripId: number): Promise<{
+  message: string;
+  count: number;
+  dataPoints: DataPoint[];
+}> {
+  return apiRequest(`/datapoints/trip/${tripId}`);
+}
+
+/**
+ * Delete a trip
+ */
+export async function deleteTrip(tripId: number): Promise<{
+  message: string;
+}> {
+  return apiRequest(`/trips/${tripId}`, {
+    method: 'DELETE',
+  });
 }
 

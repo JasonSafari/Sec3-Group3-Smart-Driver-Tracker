@@ -15,6 +15,9 @@ import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/hooks/use-auth';
 import { fetchFamilyTrips, type Trip } from '@/utils/api';
 import { deleteTrip } from '@/services/tripService';
+import { EmptyState } from '@/components/empty-state';
+import { Toast } from '@/components/toast';
+import { getUserFriendlyError, getSuccessMessage } from '@/utils/errorMessages';
 
 export default function FamilyTripsScreen() {
   const { token, user } = useAuth();
@@ -24,6 +27,8 @@ export default function FamilyTripsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [familyMembers, setFamilyMembers] = useState(0);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+  const [showToast, setShowToast] = useState(false);
 
   const loadFamilyTrips = async () => {
     if (!token) {
@@ -43,9 +48,11 @@ export default function FamilyTripsScreen() {
       const data = await fetchFamilyTrips(token);
       setTrips(data.trips ?? []);
       setFamilyMembers(data.family_members ?? 0);
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to fetch family trips');
-    } finally {
+          } catch (err: any) {
+            const friendlyError = getUserFriendlyError(err);
+            setError(friendlyError);
+            showToastMessage(friendlyError, 'error');
+          } finally {
       setLoading(false);
       setRefreshing(false);
     }
@@ -55,6 +62,11 @@ export default function FamilyTripsScreen() {
     loadFamilyTrips();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  const showToastMessage = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'error') => {
+    setToast({ message, type });
+    setShowToast(true);
+  };
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -73,10 +85,12 @@ export default function FamilyTripsScreen() {
           onPress: async () => {
             try {
               await deleteTrip(tripId);
+              showToastMessage(getSuccessMessage('tripDelete'), 'success');
               // Reload trips after deletion
               loadFamilyTrips();
             } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to delete trip');
+              const friendlyError = getUserFriendlyError(error);
+              showToastMessage(friendlyError, 'error');
             }
           },
         },
@@ -138,14 +152,13 @@ export default function FamilyTripsScreen() {
           <ThemedText type="subtitle">Error</ThemedText>
           <ThemedText>{error}</ThemedText>
         </ThemedView>
-      ) : trips.length === 0 ? (
-        <ThemedView style={styles.center}>
-          <ThemedText type="subtitle">No family trips yet</ThemedText>
-          <ThemedText>
-            Family members' trips will appear here once they start recording trips.
-          </ThemedText>
-        </ThemedView>
-      ) : (
+            ) : trips.length === 0 ? (
+              <EmptyState
+                icon="👨‍👩‍👧‍👦"
+                title="No family trips yet"
+                message="Family members' trips will appear here once they start recording trips."
+              />
+            ) : (
         <FlatList
           data={trips}
           keyExtractor={(t) => String(t.trip_id)}

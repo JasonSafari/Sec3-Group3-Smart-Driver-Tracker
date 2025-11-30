@@ -4,11 +4,6 @@ const { body } = require('express-validator');
 const { register, login } = require('../controllers/authController');
 const { authRateLimiter } = require('../middleware/rateLimiter');
 
-/**
- * @route   POST /api/auth/register
- * @desc    Register a new user
- * @access  Public
- */
 router.post('/register', authRateLimiter, [
   body('name')
     .trim()
@@ -27,11 +22,6 @@ router.post('/register', authRateLimiter, [
     .isIn(['parent', 'teen']).withMessage('Role must be either parent or teen')
 ], register);
 
-/**
- * @route   POST /api/auth/login
- * @desc    Login user
- * @access  Public
- */
 router.post('/login', authRateLimiter, [
   body('email')
     .trim()

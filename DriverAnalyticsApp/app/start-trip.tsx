@@ -2,7 +2,6 @@ import * as Location from 'expo-location';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   StyleSheet,
   View,
@@ -15,6 +14,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/hooks/use-auth';
 import { startTrip } from '@/services/tripService';
+import { Toast } from '@/components/toast';
+import { getUserFriendlyError, getSuccessMessage } from '@/utils/errorMessages';
 
 export default function StartTripScreen() {
   const { token } = useAuth();
@@ -23,20 +24,29 @@ export default function StartTripScreen() {
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [permissionGranted, setPermissionGranted] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+  const [showToast, setShowToast] = useState(false);
 
   useEffect(() => {
     requestLocationPermission();
   }, []);
+
+  const showToastMessage = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'error') => {
+    setToast({ message, type });
+    setShowToast(true);
+  };
 
   const requestLocationPermission = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         setLocationError('Location permission is required to start a trip');
+        showToastMessage('Location permission is required. Please enable it in settings.', 'warning');
         return;
       }
 
       setPermissionGranted(true);
+      setLocationError(null);
       
       // Get current location
       const currentLocation = await Location.getCurrentPositionAsync({
@@ -44,18 +54,20 @@ export default function StartTripScreen() {
       });
       setLocation(currentLocation);
     } catch (error: any) {
-      setLocationError('Failed to get location: ' + error.message);
+      const friendlyError = getUserFriendlyError(error);
+      setLocationError(friendlyError);
+      showToastMessage(friendlyError, 'error');
     }
   };
 
   const handleStartTrip = async () => {
     if (!token) {
-      Alert.alert('Error', 'Not authenticated');
+      showToastMessage('Please log in to start a trip', 'error');
       return;
     }
 
     if (!location) {
-      Alert.alert('Error', 'Location not available. Please wait...');
+      showToastMessage('Location not available. Please wait for GPS to connect...', 'warning');
       return;
     }
 
@@ -71,16 +83,27 @@ export default function StartTripScreen() {
       await AsyncStorage.setItem('activeTripId', String(result.trip.trip_id));
       await AsyncStorage.setItem('tripDataPoints', JSON.stringify([]));
 
-      // Navigate to live trip screen
-      router.replace('/live-trip');
+      showToastMessage(getSuccessMessage('tripStart'), 'success');
+      
+      // Navigate to live trip screen after short delay
+      setTimeout(() => {
+        router.replace('/live-trip');
+      }, 500);
     } catch (error: any) {
-      Alert.alert('Failed to start trip', error.message || 'Please try again');
+      const friendlyError = getUserFriendlyError(error);
+      showToastMessage(friendlyError, 'error');
       setLoading(false);
     }
   };
 
   return (
     <ThemedView style={styles.container}>
+      <Toast
+        message={toast?.message || ''}
+        type={toast?.type || 'error'}
+        visible={showToast}
+        onHide={() => setShowToast(false)}
+      />
       <BackHeader title="Start Trip" showHome />
       <ThemedView style={styles.header}>
         <ThemedText type="title">Start Trip</ThemedText>

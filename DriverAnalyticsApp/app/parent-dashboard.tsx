@@ -24,6 +24,9 @@ import {
 import { getUserStats } from '@/services/analyticsService';
 import { getUserTrips, deleteTrip, type Trip } from '@/services/tripService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Toast } from '@/components/toast';
+import { getUserFriendlyError, getSuccessMessage } from '@/utils/errorMessages';
+import { EmptyState } from '@/components/empty-state';
 
 export default function ParentDashboard() {
   const { user, token, loading: authLoading, setUser } = useAuth();
@@ -37,6 +40,8 @@ export default function ParentDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [familyInfo, setFamilyInfo] = useState<{ invite_code?: string; family_name?: string } | null>(null);
   const [showInviteCode, setShowInviteCode] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+  const [showToast, setShowToast] = useState(false);
 
   useEffect(() => {
     // Don't load data while auth is still loading
@@ -55,6 +60,11 @@ export default function ParentDashboard() {
       loadTeenData(selectedTeenId);
     }
   }, [selectedTeenId, token, authLoading]);
+
+  const showToastMessage = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'error') => {
+    setToast({ message, type });
+    setShowToast(true);
+  };
 
   const loadFamilyData = async () => {
     if (!token) return;
@@ -87,11 +97,22 @@ export default function ParentDashboard() {
         errorMessage.includes('Session expired') ||
         errorMessage.includes('Not authenticated') ||
         errorMessage.includes('Please login again') ||
-        errorMessage.includes('Access denied')
+        errorMessage.includes('Access denied') ||
+        errorMessage.includes('Unauthorized')
       ) {
-        // Redirect to login on auth failure
-        router.replace('/login');
+        // Redirect to login on auth failure - don't show toast, just redirect
+        // Clear loading state first
+        setLoading(false);
+        setRefreshing(false);
+        // Use a small delay to ensure state is updated before navigation
+        setTimeout(() => {
+          router.replace('/login');
+        }, 100);
+        return; // Exit early to prevent further processing
       }
+      // For other errors, show a toast message
+      const friendlyError = getUserFriendlyError(error);
+      showToastMessage(friendlyError, 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -202,12 +223,14 @@ export default function ParentDashboard() {
           onPress: async () => {
             try {
               await deleteTrip(tripId);
+              showToastMessage(getSuccessMessage('tripDelete'), 'success');
               // Reload data after deletion
               if (selectedTeenId) {
                 loadTeenData(selectedTeenId);
               }
             } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to delete trip');
+              const friendlyError = getUserFriendlyError(error);
+              showToastMessage(friendlyError, 'error');
             }
           },
         },
@@ -244,6 +267,12 @@ export default function ParentDashboard() {
 
   return (
     <ThemedView style={styles.container}>
+      <Toast
+        message={toast?.message || ''}
+        type={toast?.type || 'error'}
+        visible={showToast}
+        onHide={() => setShowToast(false)}
+      />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 16 }]}
@@ -343,7 +372,11 @@ export default function ParentDashboard() {
           <ThemedView style={styles.section}>
             <ThemedText type="subtitle">Recent Trips</ThemedText>
             {recentTrips.length === 0 ? (
-              <ThemedText style={styles.emptyText}>No trips yet</ThemedText>
+              <EmptyState
+                icon="🚗"
+                title="No trips yet"
+                message={`${selectedTeen.name} hasn't recorded any trips yet.`}
+              />
             ) : (
               <View>
                 {recentTrips.map((item) => {

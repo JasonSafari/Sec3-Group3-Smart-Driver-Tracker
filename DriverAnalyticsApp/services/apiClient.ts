@@ -1,9 +1,10 @@
 /**
  * Centralized API Client
- * Handles base URL, token injection, and error handling
+ * Handles base URL, token injection, error handling, and offline queueing
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { queueRequest } from './offlineQueue';
 
 declare const process: any;
 
@@ -30,6 +31,7 @@ type RequestOptions = {
   body?: any;
   headers?: Record<string, string>;
   requireAuth?: boolean;
+  skipQueue?: boolean; // Set to true to prevent queueing (e.g., for retry attempts)
 };
 
 async function apiRequest<T>(
@@ -41,6 +43,7 @@ async function apiRequest<T>(
     body,
     headers = {},
     requireAuth = true,
+    skipQueue = false,
   } = options;
 
   // Get token from AsyncStorage if auth required
@@ -99,7 +102,30 @@ async function apiRequest<T>(
       throw new Error('Request timeout. Please check your connection.');
     }
     
-    if (error.message === 'Network request failed') {
+    // Handle network failures - queue for retry if not already a retry attempt
+    if (error.message === 'Network request failed' || error.name === 'TypeError') {
+      // Check if it's a network error (TypeError usually means fetch failed)
+      const isNetworkError = 
+        error.message === 'Network request failed' ||
+        error.message?.includes('fetch') ||
+        error.message?.includes('network');
+      
+      if (isNetworkError && !skipQueue && method !== 'GET') {
+        // Queue POST/PUT/DELETE requests for retry (GET requests are idempotent but less critical)
+        try {
+          await queueRequest({
+            endpoint,
+            method,
+            body,
+            headers,
+            requireAuth,
+          });
+          console.log(`📦 Queued ${method} ${endpoint} for offline retry`);
+        } catch (queueError) {
+          console.error('Error queueing request:', queueError);
+        }
+      }
+      
       throw new Error(
         'Cannot connect to server. Make sure:\n' +
         '1. Backend is running\n' +

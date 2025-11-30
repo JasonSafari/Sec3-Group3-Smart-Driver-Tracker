@@ -16,6 +16,8 @@ import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/hooks/use-auth';
 import { createFamily } from '@/services/familyService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Toast } from '@/components/toast';
+import { getUserFriendlyError, getSuccessMessage } from '@/utils/errorMessages';
 
 export default function CreateFamilyScreen() {
   const { user, token, setUser } = useAuth();
@@ -23,15 +25,32 @@ export default function CreateFamilyScreen() {
   const [familyName, setFamilyName] = useState('');
   const [loading, setLoading] = useState(false);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+  const [showToast, setShowToast] = useState(false);
+  const [nameError, setNameError] = useState('');
+
+  const showToastMessage = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'error') => {
+    setToast({ message, type });
+    setShowToast(true);
+  };
 
   const handleCreate = async () => {
+    setNameError('');
+    
     if (!familyName.trim()) {
-      Alert.alert('Error', 'Please enter a family name');
+      setNameError('Family name is required');
+      showToastMessage('Please enter a family name', 'error');
+      return;
+    }
+
+    if (familyName.trim().length < 2) {
+      setNameError('Family name must be at least 2 characters');
+      showToastMessage('Family name must be at least 2 characters', 'error');
       return;
     }
 
     if (!token) {
-      Alert.alert('Error', 'Not authenticated');
+      showToastMessage('Please log in to create a family', 'error');
       return;
     }
 
@@ -54,19 +73,15 @@ export default function CreateFamilyScreen() {
         setUser(result.user);
         await AsyncStorage.setItem('userData', JSON.stringify(result.user));
       }
-      // Navigate directly to parent dashboard to avoid redirect loop
-      Alert.alert('Success', 'Family created! Share the invite code with your teen.', [
-        {
-          text: 'OK',
-          onPress: () => {
-            setTimeout(() => {
-              router.replace('/parent-dashboard');
-            }, 100);
-          },
-        },
-      ]);
+      // Show success message
+      showToastMessage(getSuccessMessage('familyCreate'), 'success');
+      // Navigate directly to parent dashboard after short delay
+      setTimeout(() => {
+        router.replace('/parent-dashboard');
+      }, 1000);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to create family');
+      const friendlyError = getUserFriendlyError(error);
+      showToastMessage(friendlyError, 'error');
     } finally {
       setLoading(false);
     }
@@ -75,7 +90,7 @@ export default function CreateFamilyScreen() {
   const handleCopyCode = async () => {
     if (inviteCode) {
       await Clipboard.setStringAsync(inviteCode);
-      Alert.alert('Copied!', 'Invite code copied to clipboard');
+      showToastMessage(getSuccessMessage('inviteCopy'), 'success');
     }
   };
 
@@ -116,6 +131,12 @@ export default function CreateFamilyScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <Toast
+        message={toast?.message || ''}
+        type={toast?.type || 'error'}
+        visible={showToast}
+        onHide={() => setShowToast(false)}
+      />
       <BackHeader title="Create Family" showHome />
       <ThemedView style={styles.header}>
         <ThemedText type="title">Create Family</ThemedText>
@@ -125,12 +146,18 @@ export default function CreateFamilyScreen() {
       <View style={styles.form}>
         <ThemedText style={styles.label}>Family Name</ThemedText>
         <TextInput
-          style={styles.input}
+          style={[styles.input, nameError && styles.inputError]}
           value={familyName}
-          onChangeText={setFamilyName}
+          onChangeText={(text) => {
+            setFamilyName(text);
+            setNameError('');
+          }}
           placeholder="Smith Family"
           placeholderTextColor="#6b7280"
         />
+        {nameError ? (
+          <ThemedText style={styles.errorText}>{nameError}</ThemedText>
+        ) : null}
 
         <Pressable
           style={[styles.button, loading && styles.buttonDisabled]}
@@ -174,7 +201,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#f9fafb',
     backgroundColor: '#1f2937',
+    marginBottom: 4,
+  },
+  inputError: {
+    borderColor: '#ef4444',
+    borderWidth: 2,
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 12,
     marginBottom: 12,
+    marginLeft: 4,
   },
   button: {
     marginTop: 8,

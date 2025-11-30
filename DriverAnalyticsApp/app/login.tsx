@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   StyleSheet,
   Text,
   TextInput,
@@ -11,6 +10,8 @@ import {
 import { Link, useRouter } from 'expo-router';
 
 import { useAuth } from '@/hooks/use-auth';
+import { Toast } from '@/components/toast';
+import { getUserFriendlyError, getSuccessMessage } from '@/utils/errorMessages';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -18,23 +19,64 @@ export default function LoginScreen() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+  const [showToast, setShowToast] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  const showToastMessage = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'error') => {
+    setToast({ message, type });
+    setShowToast(true);
+  };
+
+  const validateForm = (): boolean => {
+    let isValid = true;
+    setEmailError('');
+    setPasswordError('');
+
+    if (!email.trim()) {
+      setEmailError('Email is required');
+      isValid = false;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setEmailError('Please enter a valid email address');
+      isValid = false;
+    }
+
+    if (!password) {
+      setPasswordError('Password is required');
+      isValid = false;
+    }
+
+    return isValid;
+  };
 
   const handleSubmit = async () => {
-    if (!email || !password) {
-      Alert.alert('Missing information', 'Please enter email and password.');
+    if (!validateForm()) {
+      showToastMessage('Please fill in all fields correctly', 'error');
       return;
     }
 
     try {
       await login(email.trim(), password);
-      router.replace('/(tabs)');
+      showToastMessage(getSuccessMessage('login'), 'success');
+      setTimeout(() => {
+        router.replace('/(tabs)');
+      }, 500);
     } catch (error: any) {
-      Alert.alert('Login failed', error.message ?? 'Please try again.');
+      const friendlyError = getUserFriendlyError(error);
+      showToastMessage(friendlyError, 'error');
     }
   };
 
   return (
     <View style={styles.container}>
+      <Toast
+        message={toast?.message || ''}
+        type={toast?.type || 'error'}
+        visible={showToast}
+        onHide={() => setShowToast(false)}
+      />
+      
       <Text style={styles.title}>Welcome back</Text>
       <Text style={styles.subtitle}>Sign in to continue</Text>
 
@@ -42,21 +84,35 @@ export default function LoginScreen() {
         <Text style={styles.label}>Email</Text>
         <TextInput
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(text) => {
+            setEmail(text);
+            setEmailError('');
+          }}
           autoCapitalize="none"
           keyboardType="email-address"
           placeholder="you@example.com"
-          style={styles.input}
+          placeholderTextColor="#6b7280"
+          style={[styles.input, emailError && styles.inputError]}
         />
+        {emailError ? (
+          <Text style={styles.errorText}>{emailError}</Text>
+        ) : null}
 
         <Text style={styles.label}>Password</Text>
         <TextInput
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(text) => {
+            setPassword(text);
+            setPasswordError('');
+          }}
           secureTextEntry
           placeholder="••••••••"
-          style={styles.input}
+          placeholderTextColor="#6b7280"
+          style={[styles.input, passwordError && styles.inputError]}
         />
+        {passwordError ? (
+          <Text style={styles.errorText}>{passwordError}</Text>
+        ) : null}
 
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}
@@ -116,7 +172,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#f9fafb',
     backgroundColor: '#18181b',
-    marginBottom: 12,
+    marginBottom: 4,
+  },
+  inputError: {
+    borderColor: '#ef4444',
+    borderWidth: 2,
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 12,
+    marginBottom: 8,
+    marginLeft: 4,
   },
   button: {
     marginTop: 8,

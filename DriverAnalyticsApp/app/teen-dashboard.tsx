@@ -15,6 +15,10 @@ import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/hooks/use-auth';
 import { getUserStats } from '@/services/analyticsService';
 import { getUserTrips, type Trip } from '@/services/tripService';
+import { calculateAchievements } from '@/services/achievementsService';
+import { AchievementsDisplay } from '@/components/achievements-display';
+import { ProgressIndicator } from '@/components/progress-indicator';
+import { EmptyState } from '@/components/empty-state';
 
 export default function TeenDashboard() {
   const { user, token, loading: authLoading } = useAuth();
@@ -24,6 +28,7 @@ export default function TeenDashboard() {
   const [recentTrips, setRecentTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [achievements, setAchievements] = useState<any[]>([]);
 
   const loadData = async () => {
     if (!token) return;
@@ -35,6 +40,17 @@ export default function TeenDashboard() {
       ]);
       setStats(statsData.stats);
       setRecentTrips(tripsData.trips || []);
+      
+      // Calculate achievements
+      const calculatedAchievements = calculateAchievements({
+        totalTrips: statsData.stats?.totalTrips || 0,
+        totalDistance: statsData.stats?.totalDistance || 0,
+        perfectScores: statsData.stats?.perfectScores || 0,
+        averageScore: statsData.stats?.averageScore || 0,
+        consecutiveDays: 0, // TODO: Calculate from trip history
+        longestTrip: 0, // TODO: Calculate from trip history
+      });
+      setAchievements(calculatedAchievements);
     } catch (error: any) {
       console.error('Error loading dashboard:', error);
       // Check if it's an auth error (session expired, not authenticated)
@@ -133,6 +149,39 @@ export default function TeenDashboard() {
         </ThemedView>
       </ThemedView>
 
+      {/* Achievements */}
+      {achievements.length > 0 && (
+        <AchievementsDisplay achievements={achievements} maxDisplay={6} />
+      )}
+
+      {/* Progress Indicators */}
+      <ThemedView style={styles.progressSection}>
+        <ThemedText type="subtitle" style={styles.sectionTitle}>
+          Progress
+        </ThemedText>
+        <ProgressIndicator
+          label="Next Achievement: 10 Trips"
+          current={stats?.totalTrips || 0}
+          target={10}
+          unit=" trips"
+          color="#3b82f6"
+        />
+        <ProgressIndicator
+          label="Distance Goal: 100 km"
+          current={stats?.totalDistance || 0}
+          target={100}
+          unit=" km"
+          color="#22c55e"
+        />
+        <ProgressIndicator
+          label="Score Goal: 90+ Average"
+          current={overallScore}
+          target={90}
+          unit="/100"
+          color="#f59e0b"
+        />
+      </ThemedView>
+
       {/* Action Buttons */}
       <View style={styles.actions}>
         <Pressable
@@ -156,11 +205,17 @@ export default function TeenDashboard() {
       </View>
 
       {/* Recent Trips */}
-      <ThemedView style={styles.section}>
-        <ThemedText type="subtitle">Recent Trips</ThemedText>
-        {recentTrips.length === 0 ? (
-          <ThemedText style={styles.emptyText}>No trips yet. Start your first trip!</ThemedText>
-        ) : (
+                 <ThemedView style={styles.section}>
+                   <ThemedText type="subtitle">Recent Trips</ThemedText>
+                   {recentTrips.length === 0 ? (
+                     <EmptyState
+                       icon="🚗"
+                       title="No trips yet"
+                       message="Start your first trip from the dashboard to see your driving history here!"
+                       actionLabel="Start Trip"
+                       onAction={() => router.push('/start-trip')}
+                     />
+                   ) : (
           <View>
             {recentTrips.map((item) => {
               const date = item.start_time ? new Date(item.start_time) : null;
@@ -256,6 +311,16 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 12,
     color: '#9ca3af',
+  },
+  progressSection: {
+    marginTop: 16,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: '#1f2937',
+  },
+  sectionTitle: {
+    marginBottom: 16,
   },
   actions: {
     gap: 12,
