@@ -1,98 +1,67 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+// app/(tabs)/index.tsx
+import { useState } from 'react';
+import { Alert, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { colors, spacing, typography } from '../../src/theme';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import Button from '../../src/components/Button';
+import Card from '../../src/components/Card';
+import ErrorMessage from '../../src/components/ErrorMessage';
+import Input from '../../src/components/Input';
+import LoadingSpinner from '../../src/components/LoadingSpinner';
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
-  );
+    return (
+        <SafeAreaView style={styles.container}>
+            <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+                <Text style={styles.title}>Driver Analytics</Text>
+                <Text style={styles.subtitle}>Component Testing</Text>
+
+                <Card>
+                    <Text style={styles.sectionTitle}>Buttons</Text>
+                    <Button title="Primary Button" onPress={() => Alert.alert('Success', 'Primary pressed!')} />
+                    <Button title="Secondary Button" variant="secondary" onPress={() => Alert.alert('Success', 'Secondary pressed!')} />
+                    <Button title="Outline Button" variant="outline" onPress={() => Alert.alert('Success', 'Outline pressed!')} />
+                    <Button title="Danger Button" variant="danger" onPress={() => Alert.alert('Warning', 'Danger pressed!')} />
+                    <Button title="Loading Button" loading />
+                    <Button title="Small Button" size="small" onPress={() => Alert.alert('Success', 'Small pressed!')} />
+                </Card>
+
+                <Card>
+                    <Text style={styles.sectionTitle}>Inputs</Text>
+                    <Input label="Email" placeholder="Enter your email" value={email} onChangeText={setEmail} keyboardType="email-address" />
+                    <Input label="Password" placeholder="Enter your password" value={password} onChangeText={setPassword} secureTextEntry />
+                    <Input label="Error Example" placeholder="This has an error" error="This field is required" />
+                </Card>
+
+                <Text style={styles.sectionTitle}>Card Variants</Text>
+                <Card><Text style={styles.cardText}>Default Card with Shadow</Text></Card>
+                <Card variant="flat"><Text style={styles.cardText}>Flat Card (No Shadow)</Text></Card>
+                <Card variant="outlined"><Text style={styles.cardText}>Outlined Card</Text></Card>
+                <Card onPress={() => Alert.alert('Card Pressed', 'You tapped the card!')}><Text style={styles.cardText}>Pressable Card (Tap Me!)</Text></Card>
+
+                <Card>
+                    <Text style={styles.sectionTitle}>Loading Spinner</Text>
+                    <LoadingSpinner message="Loading your data..." />
+                </Card>
+
+                <ErrorMessage message="Unable to connect to the server. Please check your internet connection." onRetry={() => Alert.alert('Retrying', 'Attempting to reconnect...')} />
+
+                <View style={styles.spacer} />
+            </ScrollView>
+        </SafeAreaView>
+    );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+    container: { flex: 1, backgroundColor: colors.background },
+    scrollView: { flex: 1 },
+    contentContainer: { padding: spacing.md },
+    title: { fontSize: typography.sizes.xxxl, fontWeight: typography.weights.bold as any, color: colors.primary, marginBottom: spacing.xs },
+    subtitle: { fontSize: typography.sizes.md, color: colors.textSecondary, marginBottom: spacing.xl },
+    sectionTitle: { fontSize: typography.sizes.lg, fontWeight: typography.weights.semibold as any, color: colors.textPrimary, marginBottom: spacing.md },
+    cardText: { fontSize: typography.sizes.md, color: colors.textPrimary },
+    spacer: { height: spacing.xl },
 });
