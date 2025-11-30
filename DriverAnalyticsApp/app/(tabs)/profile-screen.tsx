@@ -1,43 +1,32 @@
-import { StyleSheet, Text, View } from 'react-native';
-import Card from '../../src/components/Card';
-import { colors, spacing, typography } from '../../src/theme';
+import { StyleSheet, Text, View } from "react-native";
+import Button from "../../src/components/Button";
+import Card from "../../src/components/Card";
+import { colors, spacing, typography } from "../../src/theme";
 
 export default function ProfileScreen() {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Profile</Text>
+    const user = { name: "Maxwell Omorodion", email: "maxwell@example.com" };
 
-      <Card>
-        <Text style={styles.label}>Name:</Text>
-        <Text style={styles.value}>Coming Soon</Text>
+    return (
+        <View style={styles.container}>
+            <Text style={styles.header}>Profile</Text>
 
-        <Text style={styles.label}>Email:</Text>
-        <Text style={styles.value}>Coming Soon</Text>
-      </Card>
-    </View>
-  );
+            <Card>
+                <Text style={styles.label}>Name</Text>
+                <Text style={styles.value}>{user.name}</Text>
+
+                <Text style={styles.label}>Email</Text>
+                <Text style={styles.value}>{user.email}</Text>
+            </Card>
+
+            <Button title="Edit Profile" onPress={() => {}} />
+            <Button title="Logout" variant="danger" onPress={() => {}} />
+        </View>
+    );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: spacing.lg,
-    backgroundColor: colors.background,
-  },
-  title: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: '700',
-    marginBottom: spacing.lg,
-  },
-  label: {
-    fontSize: typography.sizes.md,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: spacing.xs,
-  },
-  value: {
-    fontSize: typography.sizes.md,
-    color: colors.textSecondary,
-    marginBottom: spacing.md,
-  },
+    container: { flex: 1, padding: spacing.lg, backgroundColor: colors.background },
+    header: { fontSize: typography.sizes.xxl, fontWeight: "bold" },
+    label: { marginTop: spacing.sm, fontWeight: "600" },
+    value: { fontSize: typography.sizes.md, marginBottom: spacing.sm }
 });

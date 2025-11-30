@@ -1,0 +1,23 @@
+[
+  {
+    "id": "trip01",
+    "userId": "teen01",
+    "distanceKm": 14.2,
+    "durationMinutes": 22,
+    "date": "2025-11-20"
+  },
+  {
+    "id": "trip02",
+    "userId": "teen01",
+    "distanceKm": 9.7,
+    "durationMinutes": 15,
+    "date": "2025-11-18"
+  },
+  {
+    "id": "trip03",
+    "userId": "teen02",
+    "distanceKm": 21.4,
+    "durationMinutes": 31,
+    "date": "2025-11-17"
+  }
+]
