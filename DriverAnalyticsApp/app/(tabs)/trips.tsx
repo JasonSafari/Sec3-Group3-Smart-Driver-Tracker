@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/hooks/use-auth';
@@ -90,6 +89,7 @@ export default function TripsScreen() {
   const renderItem = ({ item }: { item: Trip }) => {
     const date = item.start_time ? new Date(item.start_time) : null;
     const score = item.score?.overall_score;
+    const isValidScore = typeof score === 'number' && !isNaN(score);
     
     return (
       <Pressable
@@ -102,7 +102,7 @@ export default function TripsScreen() {
           <ThemedText>
             Distance: {item.distance_km ?? '—'} km • Avg speed: {item.avg_speed ?? '—'} km/h
           </ThemedText>
-          {score !== undefined && (
+          {isValidScore && (
             <ThemedText style={styles.score}>
               Score: {score.toFixed(1)}/100
             </ThemedText>
@@ -112,87 +112,112 @@ export default function TripsScreen() {
     );
   };
 
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#0f172a', dark: '#020617' }}
-      headerImage={null}
-    >
-      <ThemedView style={styles.header}>
-        <ThemedText type="title">My Trips</ThemedText>
-        <ThemedText>Trips associated with your account.</ThemedText>
-        
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search trips..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmitEditing={handleSearch}
-            placeholderTextColor="#9ca3af"
-          />
-          <Pressable style={styles.searchButton} onPress={handleSearch}>
-            <ThemedText>Search</ThemedText>
-          </Pressable>
-        </View>
+  // Render header component for FlatList
+  const renderHeader = () => (
+    <ThemedView style={styles.header}>
+      <ThemedText type="title">My Trips</ThemedText>
+      <ThemedText>Trips associated with your account.</ThemedText>
+      
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search trips..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onSubmitEditing={handleSearch}
+          placeholderTextColor="#9ca3af"
+        />
+        <Pressable style={styles.searchButton} onPress={handleSearch}>
+          <ThemedText>Search</ThemedText>
+        </Pressable>
+      </View>
 
-        {/* Action Buttons */}
-        <View style={styles.actions}>
+      {/* Action Buttons */}
+      <View style={styles.actions}>
+        <Pressable
+          style={styles.actionButton}
+          onPress={() => setShowFilters(!showFilters)}
+        >
+          <ThemedText>Filters</ThemedText>
+        </Pressable>
+        <Pressable style={styles.actionButton} onPress={handleExport}>
+          <ThemedText>Export CSV</ThemedText>
+        </Pressable>
+        {user?.role === 'parent' && (
           <Pressable
             style={styles.actionButton}
-            onPress={() => setShowFilters(!showFilters)}
+            onPress={() => router.push('/family-trips')}
           >
-            <ThemedText>Filters</ThemedText>
+            <ThemedText>Family Trips</ThemedText>
           </Pressable>
-          <Pressable style={styles.actionButton} onPress={handleExport}>
-            <ThemedText>Export CSV</ThemedText>
-          </Pressable>
-          {user?.role === 'parent' && (
-            <Pressable
-              style={styles.actionButton}
-              onPress={() => router.push('/family-trips')}
-            >
-              <ThemedText>Family Trips</ThemedText>
-            </Pressable>
-          )}
-        </View>
-      </ThemedView>
+        )}
+      </View>
+    </ThemedView>
+  );
 
-      {loading ? (
+  // Render empty/loading/error states
+  const renderListContent = () => {
+    if (loading) {
+      return (
         <View style={styles.center}>
           <ActivityIndicator size="large" />
         </View>
-      ) : error ? (
+      );
+    }
+    
+    if (error) {
+      return (
         <ThemedView style={styles.center}>
           <ThemedText type="subtitle">Error</ThemedText>
           <ThemedText>{error}</ThemedText>
         </ThemedView>
-      ) : trips.length === 0 ? (
+      );
+    }
+    
+    if (trips.length === 0) {
+      return (
         <ThemedView style={styles.center}>
           <ThemedText type="subtitle">No trips yet</ThemedText>
           <ThemedText>
             Once you start recording trips from the backend or app, they will appear here.
           </ThemedText>
         </ThemedView>
-      ) : (
-        <FlatList
-          data={trips}
-          keyExtractor={(t) => String(t.trip_id)}
-          renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-        />
-      )}
-    </ParallaxScrollView>
+      );
+    }
+    
+    return null; // FlatList will render items
+  };
+
+  return (
+    <ThemedView style={styles.container}>
+      <FlatList
+        data={trips}
+        keyExtractor={(t) => String(t.trip_id)}
+        renderItem={renderItem}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={renderListContent}
+        contentContainerStyle={[
+          styles.listContent,
+          trips.length === 0 && styles.emptyContent
+        ]}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      />
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   header: {
     gap: 12,
     marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -234,7 +259,11 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 32,
+    paddingHorizontal: 16,
     gap: 12,
+  },
+  emptyContent: {
+    flex: 1,
   },
   card: {
     padding: 12,

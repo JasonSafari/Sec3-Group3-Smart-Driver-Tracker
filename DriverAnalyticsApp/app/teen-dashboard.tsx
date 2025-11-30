@@ -16,7 +16,7 @@ import { getUserStats } from '@/services/analyticsService';
 import { getUserTrips, type Trip } from '@/services/tripService';
 
 export default function TeenDashboard() {
-  const { user, token } = useAuth();
+  const { user, token, loading: authLoading } = useAuth();
   const router = useRouter();
   const [stats, setStats] = useState<any>(null);
   const [recentTrips, setRecentTrips] = useState<Trip[]>([]);
@@ -35,6 +35,16 @@ export default function TeenDashboard() {
       setRecentTrips(tripsData.trips || []);
     } catch (error: any) {
       console.error('Error loading dashboard:', error);
+      // Check if it's an auth error (session expired, not authenticated)
+      const errorMessage = error?.message || '';
+      if (
+        errorMessage.includes('Session expired') ||
+        errorMessage.includes('Not authenticated') ||
+        errorMessage.includes('Please login again')
+      ) {
+        // Redirect to login on auth failure
+        router.replace('/login');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -42,8 +52,16 @@ export default function TeenDashboard() {
   };
 
   useEffect(() => {
-    loadData();
-  }, [token]);
+    // Don't load data while auth is still loading
+    if (authLoading) return;
+    // Only load if we have a token
+    if (token) {
+      loadData();
+    } else {
+      // No token, redirect to login
+      router.replace('/login');
+    }
+  }, [token, authLoading]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -139,6 +157,7 @@ export default function TeenDashboard() {
             renderItem={({ item }) => {
               const date = item.start_time ? new Date(item.start_time) : null;
               const score = item.score?.overall_score;
+              const isValidScore = typeof score === 'number' && !isNaN(score);
               return (
                 <Pressable
                   onPress={() => router.push(`/trip-details?id=${item.trip_id}`)}
@@ -150,7 +169,7 @@ export default function TeenDashboard() {
                     <ThemedText>
                       {item.distance_km || '—'} km • {item.avg_speed || '—'} km/h
                     </ThemedText>
-                    {score !== undefined && (
+                    {isValidScore && (
                       <ThemedText
                         style={[styles.tripScore, { color: getScoreColor(score) }]}
                       >

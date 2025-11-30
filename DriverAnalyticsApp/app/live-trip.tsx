@@ -1,9 +1,10 @@
 import * as Location from 'expo-location';
 import { Accelerometer } from 'expo-sensors';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   StyleSheet,
   View,
@@ -27,21 +28,33 @@ export default function LiveTripScreen() {
   const [distance, setDistance] = useState(0);
   const [currentSpeed, setCurrentSpeed] = useState(0);
   const [dataPoints, setDataPoints] = useState<DataPoint[]>([]);
-  const [locationSubscription, setLocationSubscription] = useState<any>(null);
-  const [accelSubscription, setAccelSubscription] = useState<any>(null);
   const [lastLocation, setLastLocation] = useState<Location.LocationObject | null>(null);
+  
+  // Use refs to track subscriptions (better for cleanup)
+  const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
+  const accelSubscriptionRef = useRef<Accelerometer.AccelerometerSubscription | null>(null);
 
   useEffect(() => {
+    // Location tracking is not supported on web
+    if (Platform.OS === 'web') {
+      Alert.alert(
+        'Not Supported',
+        'Location tracking is only available on mobile devices. Please use the mobile app.',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+      return;
+    }
+
     let isMounted = true;
-    let locSub: any = null;
-    let accelSub: any = null;
+    let locSub: Location.LocationSubscription | null = null;
+    let accelSub: Accelerometer.AccelerometerSubscription | null = null;
 
     const init = async () => {
       try {
         const storedTripId = await AsyncStorage.getItem('activeTripId');
         if (!storedTripId) {
           Alert.alert('Error', 'No active trip found');
-          router.back();
+          if (isMounted) router.back();
           return;
         }
 
@@ -72,7 +85,7 @@ export default function LiveTripScreen() {
             }
           }
         );
-        setLocationSubscription(locSub);
+        locationSubscriptionRef.current = locSub;
 
         // Start accelerometer
         Accelerometer.setUpdateInterval(1000); // Every 1 second
@@ -83,10 +96,10 @@ export default function LiveTripScreen() {
             handleAccelerometerUpdate(acceleration);
           }
         });
-        setAccelSubscription(accelSub);
+        accelSubscriptionRef.current = accelSub;
       } catch (error: any) {
         if (isMounted) {
-          Alert.alert('Error', error.message);
+          Alert.alert('Error', error.message || 'Failed to start tracking');
         }
       }
     };
@@ -95,22 +108,40 @@ export default function LiveTripScreen() {
 
     return () => {
       isMounted = false;
-      // Cleanup subscriptions
-      if (locSub) {
-        locSub.remove();
+      // Cleanup subscriptions - use refs to ensure we have the latest values
+      if (locSub && typeof locSub.remove === 'function') {
+        try {
+          locSub.remove();
+        } catch (e) {
+          console.warn('Error removing location subscription:', e);
+        }
       }
-      if (accelSub) {
-        accelSub.remove();
+      if (accelSub && typeof accelSub.remove === 'function') {
+        try {
+          accelSub.remove();
+        } catch (e) {
+          console.warn('Error removing accelerometer subscription:', e);
+        }
       }
-      // Also cleanup state subscriptions if they exist
-      if (locationSubscription) {
-        locationSubscription.remove();
+      // Also cleanup ref subscriptions
+      if (locationSubscriptionRef.current && typeof locationSubscriptionRef.current.remove === 'function') {
+        try {
+          locationSubscriptionRef.current.remove();
+        } catch (e) {
+          console.warn('Error removing location subscription ref:', e);
+        }
+        locationSubscriptionRef.current = null;
       }
-      if (accelSubscription) {
-        accelSubscription.remove();
+      if (accelSubscriptionRef.current && typeof accelSubscriptionRef.current.remove === 'function') {
+        try {
+          accelSubscriptionRef.current.remove();
+        } catch (e) {
+          console.warn('Error removing accelerometer subscription ref:', e);
+        }
+        accelSubscriptionRef.current = null;
       }
     };
-  }, []);
+  }, [router]);
 
   // Removed - now handled in useEffect
 
@@ -190,9 +221,23 @@ export default function LiveTripScreen() {
           onPress: async () => {
             setLoading(true);
             try {
-              // Stop subscriptions
-              if (locationSubscription) locationSubscription.remove();
-              if (accelSubscription) accelSubscription.remove();
+              // Stop subscriptions using refs
+              if (locationSubscriptionRef.current && typeof locationSubscriptionRef.current.remove === 'function') {
+                try {
+                  locationSubscriptionRef.current.remove();
+                } catch (e) {
+                  console.warn('Error removing location subscription:', e);
+                }
+                locationSubscriptionRef.current = null;
+              }
+              if (accelSubscriptionRef.current && typeof accelSubscriptionRef.current.remove === 'function') {
+                try {
+                  accelSubscriptionRef.current.remove();
+                } catch (e) {
+                  console.warn('Error removing accelerometer subscription:', e);
+                }
+                accelSubscriptionRef.current = null;
+              }
 
               // Get final location
               const finalLocation = await Location.getCurrentPositionAsync({
@@ -296,15 +341,18 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   header: {
-    marginTop: 40,
+    marginTop: 16,
     marginBottom: 32,
     alignItems: 'center',
+    paddingTop: 8,
   },
   timer: {
     fontSize: 48,
+    lineHeight: 56,
     fontWeight: '700',
     marginTop: 16,
     color: '#22c55e',
+    overflow: 'visible',
   },
   statsCard: {
     padding: 20,

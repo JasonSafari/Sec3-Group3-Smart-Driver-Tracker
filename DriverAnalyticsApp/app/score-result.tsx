@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { BackHeader } from '@/components/back-header';
@@ -37,76 +37,82 @@ export default function ScoreResultScreen() {
   return (
     <ThemedView style={styles.container}>
       <BackHeader title="Trip Complete" showHome />
-      <ThemedView style={styles.header}>
-        <ThemedText type="title">Trip Complete!</ThemedText>
-        <ThemedText>Your driving score</ThemedText>
-      </ThemedView>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={true}
+      >
+        <ThemedView style={styles.header}>
+          <ThemedText type="title">Trip Complete!</ThemedText>
+          <ThemedText>Your driving score</ThemedText>
+        </ThemedView>
 
-      {/* Overall Score */}
-      <ThemedView style={styles.scoreCard}>
-        <ThemedText style={styles.scoreLabel}>Overall Score</ThemedText>
-        <ThemedText
-          style={[styles.scoreValue, { color: getScoreColor(overallScore) }]}
-        >
-          {overallScore.toFixed(1)}/100
-        </ThemedText>
-        <ThemedText
-          style={[styles.scoreLabelText, { color: getScoreColor(overallScore) }]}
-        >
-          {getScoreLabel(overallScore)}
-        </ThemedText>
-      </ThemedView>
-
-      {/* Breakdown */}
-      <ThemedView style={styles.breakdownCard}>
-        <ThemedText type="subtitle" style={styles.breakdownTitle}>
-          Score Breakdown
-        </ThemedText>
-        <ThemedView style={styles.breakdownRow}>
-          <ThemedText style={styles.breakdownLabel}>Speed Score</ThemedText>
+        {/* Overall Score */}
+        <ThemedView style={styles.scoreCard}>
+          <ThemedText style={styles.scoreLabel}>Overall Score</ThemedText>
           <ThemedText
-            style={[styles.breakdownValue, { color: getScoreColor(speedScore) }]}
+            style={[styles.scoreValue, { color: getScoreColor(overallScore) }]}
           >
-            {speedScore.toFixed(1)}/100
+            {overallScore.toFixed(1)}/100
+          </ThemedText>
+          <ThemedText
+            style={[styles.scoreLabelText, { color: getScoreColor(overallScore) }]}
+          >
+            {getScoreLabel(overallScore)}
           </ThemedText>
         </ThemedView>
-        <ThemedView style={styles.breakdownRow}>
-          <ThemedText style={styles.breakdownLabel}>Brake Score</ThemedText>
-          <ThemedText
-            style={[styles.breakdownValue, { color: getScoreColor(brakeScore) }]}
-          >
-            {brakeScore.toFixed(1)}/100
+
+        {/* Breakdown */}
+        <ThemedView style={styles.breakdownCard}>
+          <ThemedText type="subtitle" style={styles.breakdownTitle}>
+            Score Breakdown
           </ThemedText>
+          <ThemedView style={styles.breakdownRow}>
+            <ThemedText style={styles.breakdownLabel}>Speed Score</ThemedText>
+            <ThemedText
+              style={[styles.breakdownValue, { color: getScoreColor(speedScore) }]}
+            >
+              {speedScore.toFixed(1)}/100
+            </ThemedText>
+          </ThemedView>
+          <ThemedView style={styles.breakdownRow}>
+            <ThemedText style={styles.breakdownLabel}>Brake Score</ThemedText>
+            <ThemedText
+              style={[styles.breakdownValue, { color: getScoreColor(brakeScore) }]}
+            >
+              {brakeScore.toFixed(1)}/100
+            </ThemedText>
+          </ThemedView>
         </ThemedView>
-      </ThemedView>
 
-      {/* Trip Info */}
-      <ThemedView style={styles.infoCard}>
-        <ThemedView style={styles.infoRow}>
-          <ThemedText style={styles.infoLabel}>Distance</ThemedText>
-          <ThemedText style={styles.infoValue}>{params.distance} km</ThemedText>
+        {/* Trip Info */}
+        <ThemedView style={styles.infoCard}>
+          <ThemedView style={styles.infoRow}>
+            <ThemedText style={styles.infoLabel}>Distance</ThemedText>
+            <ThemedText style={styles.infoValue}>{params.distance} km</ThemedText>
+          </ThemedView>
+          <ThemedView style={styles.infoRow}>
+            <ThemedText style={styles.infoLabel}>Duration</ThemedText>
+            <ThemedText style={styles.infoValue}>{params.duration}</ThemedText>
+          </ThemedView>
         </ThemedView>
-        <ThemedView style={styles.infoRow}>
-          <ThemedText style={styles.infoLabel}>Duration</ThemedText>
-          <ThemedText style={styles.infoValue}>{params.duration}</ThemedText>
-        </ThemedView>
-      </ThemedView>
 
-      {/* Actions */}
-      <View style={styles.actions}>
-        <Pressable
-          style={[styles.button, styles.primaryButton]}
-          onPress={() => router.push(`/trip-details?id=${params.tripId}`)}
-        >
-          <ThemedText style={styles.buttonText}>View Details</ThemedText>
-        </Pressable>
-        <Pressable
-          style={[styles.button, styles.secondaryButton]}
-          onPress={() => router.replace('/(tabs)')}
-        >
-          <ThemedText style={styles.secondaryButtonText}>Done</ThemedText>
-        </Pressable>
-      </View>
+        {/* Actions */}
+        <View style={styles.actions}>
+          <Pressable
+            style={[styles.button, styles.primaryButton]}
+            onPress={() => router.push(`/trip-details?id=${params.tripId}`)}
+          >
+            <ThemedText style={styles.buttonText}>View Details</ThemedText>
+          </Pressable>
+          <Pressable
+            style={[styles.button, styles.secondaryButton]}
+            onPress={() => router.replace('/(tabs)')}
+          >
+            <ThemedText style={styles.secondaryButtonText}>Done</ThemedText>
+          </Pressable>
+        </View>
+      </ScrollView>
     </ThemedView>
   );
 }
@@ -114,19 +120,27 @@ export default function ScoreResultScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
     padding: 24,
+    paddingBottom: 40,
   },
   header: {
-    marginTop: 40,
+    marginTop: 16,
     marginBottom: 32,
     alignItems: 'center',
   },
   scoreCard: {
     alignItems: 'center',
     padding: 32,
+    paddingTop: 40,
     borderRadius: 20,
     backgroundColor: '#1f2937',
     marginBottom: 24,
+    overflow: 'visible',
   },
   scoreLabel: {
     fontSize: 16,
@@ -135,8 +149,10 @@ const styles = StyleSheet.create({
   },
   scoreValue: {
     fontSize: 64,
+    lineHeight: 72,
     fontWeight: '700',
     marginBottom: 8,
+    overflow: 'visible',
   },
   scoreLabelText: {
     fontSize: 20,
@@ -187,7 +203,8 @@ const styles = StyleSheet.create({
   },
   actions: {
     gap: 12,
-    marginTop: 'auto',
+    marginTop: 24,
+    marginBottom: 16,
   },
   button: {
     padding: 16,

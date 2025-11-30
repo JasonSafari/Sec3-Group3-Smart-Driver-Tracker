@@ -17,7 +17,7 @@ import { getUserStats } from '@/services/analyticsService';
 import { getUserTrips, type Trip } from '@/services/tripService';
 
 export default function ParentDashboard() {
-  const { user, token } = useAuth();
+  const { user, token, loading: authLoading } = useAuth();
   const router = useRouter();
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [selectedTeenId, setSelectedTeenId] = useState<number | null>(null);
@@ -27,14 +27,22 @@ export default function ParentDashboard() {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    loadFamilyData();
-  }, [token]);
+    // Don't load data while auth is still loading
+    if (authLoading) return;
+    // Only load if we have a token
+    if (token) {
+      loadFamilyData();
+    } else {
+      // No token, redirect to login
+      router.replace('/login');
+    }
+  }, [token, authLoading]);
 
   useEffect(() => {
-    if (selectedTeenId) {
+    if (selectedTeenId && token && !authLoading) {
       loadTeenData(selectedTeenId);
     }
-  }, [selectedTeenId, token]);
+  }, [selectedTeenId, token, authLoading]);
 
   const loadFamilyData = async () => {
     if (!token) return;
@@ -49,6 +57,17 @@ export default function ParentDashboard() {
       }
     } catch (error: any) {
       console.error('Error loading family:', error);
+      // Check if it's an auth error (session expired, not authenticated)
+      const errorMessage = error?.message || '';
+      if (
+        errorMessage.includes('Session expired') ||
+        errorMessage.includes('Not authenticated') ||
+        errorMessage.includes('Please login again') ||
+        errorMessage.includes('Access denied')
+      ) {
+        // Redirect to login on auth failure
+        router.replace('/login');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -67,6 +86,17 @@ export default function ParentDashboard() {
       setRecentTrips(tripsData.trips || []);
     } catch (error: any) {
       console.error('Error loading teen data:', error);
+      // Check if it's an auth error (session expired, not authenticated)
+      const errorMessage = error?.message || '';
+      if (
+        errorMessage.includes('Session expired') ||
+        errorMessage.includes('Not authenticated') ||
+        errorMessage.includes('Please login again') ||
+        errorMessage.includes('Access denied')
+      ) {
+        // Redirect to login on auth failure
+        router.replace('/login');
+      }
     }
   };
 
@@ -193,6 +223,7 @@ export default function ParentDashboard() {
                 renderItem={({ item }) => {
                   const date = item.start_time ? new Date(item.start_time) : null;
                   const score = item.score?.overall_score;
+                  const isValidScore = typeof score === 'number' && !isNaN(score);
                   return (
                     <Pressable
                       onPress={() => router.push(`/trip-details?id=${item.trip_id}`)}
@@ -204,7 +235,7 @@ export default function ParentDashboard() {
                         <ThemedText>
                           {item.distance_km || '—'} km • {item.avg_speed || '—'} km/h
                         </ThemedText>
-                        {score !== undefined && (
+                        {isValidScore && (
                           <ThemedText
                             style={[styles.tripScore, { color: getScoreColor(score) }]}
                           >

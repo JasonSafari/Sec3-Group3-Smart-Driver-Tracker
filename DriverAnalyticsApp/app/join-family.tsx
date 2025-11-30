@@ -15,7 +15,6 @@ import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/hooks/use-auth';
 import { joinFamily } from '@/services/familyService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function JoinFamilyScreen() {
   const { user, token, setUser } = useAuth();

@@ -62,6 +62,7 @@ export default function FamilyTripsScreen() {
   const renderItem = ({ item }: { item: Trip }) => {
     const date = item.start_time ? new Date(item.start_time) : null;
     const score = item.score?.overall_score;
+    const isValidScore = typeof score === 'number' && !isNaN(score);
     const driverName = item.user?.name || 'Unknown';
 
     return (
@@ -75,7 +76,7 @@ export default function FamilyTripsScreen() {
           <ThemedText>
             Distance: {item.distance_km ?? '—'} km • Avg speed: {item.avg_speed ?? '—'} km/h
           </ThemedText>
-          {score !== undefined && (
+          {isValidScore && (
             <ThemedText style={styles.score}>
               Score: {score.toFixed(1)}/100
             </ThemedText>
