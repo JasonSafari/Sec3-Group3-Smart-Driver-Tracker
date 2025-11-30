@@ -65,3 +65,32 @@ export async function getFamily(familyId: number): Promise<{
   return apiRequest(`/families/${familyId}`);
 }
 
+/**
+ * Get current user's family
+ */
+export async function getMyFamily(): Promise<{
+  family: FamilyAccount;
+  members: FamilyMember[];
+}> {
+  return apiRequest('/families/me');
+}
+
+/**
+ * Leave current family
+ */
+export async function leaveFamily(): Promise<{
+  message: string;
+  token?: string;
+  user?: {
+    user_id: number;
+    name: string;
+    email: string;
+    role: string;
+    family_id: number | null;
+  };
+}> {
+  return apiRequest('/families/leave', {
+    method: 'POST',
+  });
+}
+

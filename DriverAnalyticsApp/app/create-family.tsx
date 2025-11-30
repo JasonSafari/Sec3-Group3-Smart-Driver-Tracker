@@ -45,6 +45,15 @@ export default function CreateFamilyScreen() {
         setUser(updatedUser);
         await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
       }
+      // CRITICAL: Replace token if new one provided
+      if (result.token) {
+        await AsyncStorage.setItem('userToken', result.token);
+      }
+      // Update user from response if provided
+      if (result.user) {
+        setUser(result.user);
+        await AsyncStorage.setItem('userData', JSON.stringify(result.user));
+      }
       // Navigate directly to parent dashboard to avoid redirect loop
       Alert.alert('Success', 'Family created! Share the invite code with your teen.', [
         {

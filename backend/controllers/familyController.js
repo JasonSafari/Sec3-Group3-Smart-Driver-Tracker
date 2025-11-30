@@ -2,6 +2,7 @@ const { validationResult } = require('express-validator');
 const crypto = require('crypto');
 const FamilyAccount = require('../models/FamilyAccount');
 const User = require('../models/User');
+const { generateToken } = require('../config/jwt');
 
 /**
  * Generate a cryptographically secure random 6-character invite code
@@ -77,12 +78,28 @@ const createFamily = async (req, res) => {
     user.family_id = family.family_id;
     await user.save();
 
+    // Generate new JWT token with updated family_id
+    const newToken = generateToken({
+      user_id: user.user_id,
+      email: user.email,
+      role: user.role,
+      family_id: user.family_id
+    });
+
     res.status(201).json({
       message: 'Family account created successfully',
       family: {
         family_id: family.family_id,
         family_name: family.family_name,
         invite_code: family.invite_code
+      },
+      token: newToken,
+      user: {
+        user_id: user.user_id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        family_id: user.family_id
       }
     });
   } catch (error) {
@@ -222,11 +239,27 @@ const joinFamily = async (req, res) => {
     user.family_id = family.family_id;
     await user.save();
 
+    // Generate new JWT token with updated family_id
+    const newToken = generateToken({
+      user_id: user.user_id,
+      email: user.email,
+      role: user.role,
+      family_id: user.family_id
+    });
+
     res.status(200).json({
       message: 'Successfully joined family',
       family: {
         family_id: family.family_id,
         family_name: family.family_name
+      },
+      token: newToken,
+      user: {
+        user_id: user.user_id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        family_id: user.family_id
       }
     });
   } catch (error) {
@@ -266,8 +299,23 @@ const leaveFamily = async (req, res) => {
       await FamilyAccount.destroy({ where: { family_id: familyId } });
     }
 
+    // Generate new JWT token without family_id
+    const newToken = generateToken({
+      user_id: user.user_id,
+      email: user.email,
+      role: user.role
+    });
+
     res.status(200).json({
-      message: 'Successfully left family'
+      message: 'Successfully left family',
+      token: newToken,
+      user: {
+        user_id: user.user_id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        family_id: null
+      }
     });
   } catch (error) {
     console.error('Leave family error:', error);

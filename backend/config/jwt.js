@@ -3,14 +3,15 @@ require('dotenv').config();
 
 /**
  * Generate JWT token for authenticated user
- * @param {Object} user - User object with user_id, email, role
+ * @param {Object} user - User object with user_id, email, role, family_id (optional)
  * @returns {String} Signed JWT token
  */
 const generateToken = (user) => {
   const payload = {
     userId: user.user_id,
     email: user.email,
-    role: user.role
+    role: user.role,
+    ...(user.family_id && { family_id: user.family_id }) // Include family_id if present
   };
 
   return jwt.sign(payload, process.env.JWT_SECRET, {

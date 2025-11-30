@@ -47,6 +47,15 @@ export default function JoinFamilyScreen() {
         setUser(updatedUser);
         await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
       }
+      // CRITICAL: Replace token if new one provided
+      if (result.token) {
+        await AsyncStorage.setItem('userToken', result.token);
+      }
+      // Update user from response if provided
+      if (result.user) {
+        setUser(result.user);
+        await AsyncStorage.setItem('userData', JSON.stringify(result.user));
+      }
       // Navigate directly to teen dashboard to avoid redirect loop
       Alert.alert('Success', 'Successfully joined family!', [
         {

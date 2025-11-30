@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -8,16 +9,23 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/hooks/use-auth';
-import { getFamilyMembers, type FamilyMember } from '@/services/familyService';
+import {
+  getFamilyMembers,
+  getMyFamily,
+  leaveFamily,
+  type FamilyMember,
+} from '@/services/familyService';
 import { getUserStats } from '@/services/analyticsService';
 import { getUserTrips, type Trip } from '@/services/tripService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ParentDashboard() {
-  const { user, token, loading: authLoading } = useAuth();
+  const { user, token, loading: authLoading, setUser } = useAuth();
   const router = useRouter();
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [selectedTeenId, setSelectedTeenId] = useState<number | null>(null);
@@ -25,6 +33,8 @@ export default function ParentDashboard() {
   const [recentTrips, setRecentTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [familyInfo, setFamilyInfo] = useState<{ invite_code?: string; family_name?: string } | null>(null);
+  const [showInviteCode, setShowInviteCode] = useState(false);
 
   useEffect(() => {
     // Don't load data while auth is still loading
@@ -48,9 +58,21 @@ export default function ParentDashboard() {
     if (!token) return;
 
     try {
-      const data = await getFamilyMembers();
-      const teens = data.members.filter((m) => m.role === 'teen');
+      // Load family members and family info in parallel
+      const [membersData, familyData] = await Promise.all([
+        getFamilyMembers(),
+        getMyFamily().catch(() => null), // Don't fail if this errors
+      ]);
+      
+      const teens = membersData.members.filter((m) => m.role === 'teen');
       setFamilyMembers(teens);
+      
+      if (familyData) {
+        setFamilyInfo({
+          invite_code: familyData.family.invite_code,
+          family_name: familyData.family.family_name,
+        });
+      }
       
       if (teens.length > 0 && !selectedTeenId) {
         setSelectedTeenId(teens[0].user_id);
@@ -105,6 +127,64 @@ export default function ParentDashboard() {
     loadFamilyData();
     if (selectedTeenId) {
       loadTeenData(selectedTeenId);
+    }
+  };
+
+  const handleLeaveFamily = async () => {
+    Alert.alert(
+      'Leave Family',
+      'Are you sure you want to leave this family? You will need a new invite code to rejoin.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const result = await leaveFamily();
+              // Update token if new one provided
+              if (result.token) {
+                await AsyncStorage.setItem('userToken', result.token);
+              }
+              // Update user data
+              if (result.user) {
+                setUser(result.user);
+                await AsyncStorage.setItem('userData', JSON.stringify(result.user));
+              }
+              Alert.alert('Success', 'You have left the family.', [
+                {
+                  text: 'OK',
+                  onPress: () => {
+                    router.replace('/create-family');
+                  },
+                },
+              ]);
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to leave family');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleViewInviteCode = async () => {
+    if (familyInfo?.invite_code) {
+      await Clipboard.setStringAsync(familyInfo.invite_code);
+      Alert.alert('Invite Code', `Code: ${familyInfo.invite_code}\n\nCopied to clipboard!`);
+      setShowInviteCode(true);
+    } else {
+      // Try to load it
+      try {
+        const data = await getMyFamily();
+        const code = data.family.invite_code;
+        await Clipboard.setStringAsync(code);
+        Alert.alert('Invite Code', `Code: ${code}\n\nCopied to clipboard!`);
+        setFamilyInfo({ invite_code: code, family_name: data.family.family_name });
+        setShowInviteCode(true);
+      } catch (error: any) {
+        Alert.alert('Error', 'Could not load invite code');
+      }
     }
   };
 
@@ -172,12 +252,25 @@ export default function ParentDashboard() {
         </ThemedView>
       ) : (
         <ThemedView style={styles.emptyCard}>
-          <ThemedText>No family members yet</ThemedText>
+          <ThemedText type="subtitle" style={styles.emptyTitle}>
+            No teens in family yet
+          </ThemedText>
+          <ThemedText style={styles.emptyText}>
+            Share your invite code with your teen so they can join your family.
+          </ThemedText>
+          {familyInfo?.invite_code && (
+            <ThemedView style={styles.inviteCodeDisplay}>
+              <ThemedText style={styles.inviteCodeLabel}>Invite Code:</ThemedText>
+              <ThemedText style={styles.inviteCodeValue}>{familyInfo.invite_code}</ThemedText>
+            </ThemedView>
+          )}
           <Pressable
             style={styles.button}
-            onPress={() => router.push('/create-family')}
+            onPress={handleViewInviteCode}
           >
-            <ThemedText style={styles.buttonText}>Create Family</ThemedText>
+            <ThemedText style={styles.buttonText}>
+              {familyInfo?.invite_code ? 'Copy Invite Code' : 'View Invite Code'}
+            </ThemedText>
           </Pressable>
         </ThemedView>
       )}
@@ -257,11 +350,25 @@ export default function ParentDashboard() {
 
       {/* Actions */}
       <View style={styles.actions}>
+        {familyInfo?.invite_code && (
+          <Pressable
+            style={[styles.actionButton, { backgroundColor: '#3b82f6', marginBottom: 8 }]}
+            onPress={handleViewInviteCode}
+          >
+            <ThemedText style={styles.actionButtonText}>View Invite Code</ThemedText>
+          </Pressable>
+        )}
         <Pressable
           style={styles.actionButton}
           onPress={() => router.push('/family-trips')}
         >
           <ThemedText style={styles.actionButtonText}>View All Family Trips</ThemedText>
+        </Pressable>
+        <Pressable
+          style={[styles.actionButton, { backgroundColor: '#f59e0b', marginTop: 8 }]}
+          onPress={handleLeaveFamily}
+        >
+          <ThemedText style={styles.actionButtonText}>Leave Family</ThemedText>
         </Pressable>
         <Pressable
           style={[styles.actionButton, { backgroundColor: '#dc2626', marginTop: 8 }]}
@@ -328,6 +435,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#1f2937',
     alignItems: 'center',
     marginBottom: 16,
+  },
+  emptyTitle: {
+    marginBottom: 8,
+  },
+  emptyText: {
+    color: '#9ca3af',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  inviteCodeDisplay: {
+    padding: 16,
+    borderRadius: 8,
+    backgroundColor: '#111827',
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  inviteCodeLabel: {
+    fontSize: 12,
+    color: '#9ca3af',
+    marginBottom: 4,
+  },
+  inviteCodeValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#22c55e',
+    letterSpacing: 4,
   },
   statsCard: {
     padding: 20,
